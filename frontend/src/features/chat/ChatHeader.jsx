@@ -4,7 +4,9 @@ export default function ChatHeader({ title }) {
   return (
     <header className="chat-header">
       <p className="page-kicker">Investigation</p>
-      <h1 className="chat-header-title">{title}</h1>
+      <h1 className="chat-header-title" title={title}>
+        {title}
+      </h1>
     </header>
   );
 }

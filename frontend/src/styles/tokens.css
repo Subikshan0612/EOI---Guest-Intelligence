@@ -93,6 +93,7 @@
   --z-header: 30;
   --z-overlay: 40;
   --z-drawer: 50;
+  --space-28: 1.75rem;
 
   /* Motion */
   --duration-fast: 120ms;

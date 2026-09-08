@@ -32,7 +32,11 @@ export default function PromptInput({
   }
 
   return (
-    <form className="prompt-input" onSubmit={handleSubmit}>
+    <form
+      className={sending ? "prompt-input is-sending" : "prompt-input"}
+      onSubmit={handleSubmit}
+      aria-busy={sending}
+    >
       <label htmlFor="koi-prompt-input" className="visually-hidden">
         Intelligence investigation
       </label>
@@ -42,7 +46,7 @@ export default function PromptInput({
         rows={1}
         value={value}
         autoFocus={autoFocus}
-        placeholder={placeholder}
+        placeholder={sending ? "KOI is reviewing the signal..." : placeholder}
         disabled={sending}
         aria-disabled={sending}
         onChange={(event) => onChange(event.target.value)}
@@ -50,11 +54,11 @@ export default function PromptInput({
       />
       <button
         type="submit"
-        className="prompt-send"
+        className={sending ? "prompt-send is-busy" : "prompt-send"}
         disabled={!canSend}
-        aria-label="Send investigation"
+        aria-label={sending ? "Investigation in progress" : "Send investigation"}
       >
-        <ArrowUp size={18} strokeWidth={2} />
+        <ArrowUp size={18} strokeWidth={2} aria-hidden="true" />
       </button>
     </form>
   );

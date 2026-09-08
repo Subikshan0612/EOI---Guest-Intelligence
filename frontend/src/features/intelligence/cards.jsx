@@ -16,7 +16,13 @@ export function SignalCard({ signal, variant }) {
     <Card title="Signal" variant={variant}>
       {signal.title ? <p className="context-identity">{signal.title}</p> : null}
       <p>{signal.summary}</p>
-      {signal.severity ? <p className="muted">Severity: {signal.severity}</p> : null}
+      {signal.severity ? (
+        <div className="intelligence-meta-row">
+          <span className="severity-chip" data-level={signal.severity}>
+            Severity: {signal.severity}
+          </span>
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -61,12 +67,15 @@ export function RiskIndicator({ risk, variant }) {
   if (!risk) return null;
 
   const reason = risk.reason || risk.reasons?.[0];
+  const level = typeof risk.level === "string" ? risk.level : "unknown";
 
   return (
     <Card title="Risk" variant={variant}>
-      <span className="risk-chip" data-level={risk.level}>
-        {risk.level} risk
-      </span>
+      <div className="intelligence-meta-row">
+        <span className="risk-chip" data-level={level}>
+          {level} risk
+        </span>
+      </div>
       {reason ? <p className="muted">{reason}</p> : null}
     </Card>
   );

@@ -6,6 +6,11 @@ import PromptInput from "./PromptInput";
 import ThinkingIndicator from "./ThinkingIndicator";
 import { useChat } from "./useChat";
 
+function prefersReducedMotion() {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export default function ChatWorkspace({ conversationId = null, resetKey = "default" }) {
   const { conversation, draft, setDraft, send, retry, isProcessing, error } = useChat({
     conversationId,
@@ -24,7 +29,10 @@ export default function ChatWorkspace({ conversationId = null, resetKey = "defau
 
   useEffect(() => {
     if (!stickToBottomRef.current || !bottomRef.current) return;
-    bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    bottomRef.current.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "end",
+    });
   }, [conversation.messages, isProcessing, error]);
 
   function handleScroll() {
@@ -52,10 +60,7 @@ export default function ChatWorkspace({ conversationId = null, resetKey = "defau
   if (showEmpty) {
     return (
       <div className="chat-workspace is-empty">
-        <IntelligenceEmptyState
-          composer={composer}
-          onSuggestion={(text) => setDraft(text)}
-        />
+        <IntelligenceEmptyState composer={composer} onSuggestion={(text) => setDraft(text)} />
       </div>
     );
   }

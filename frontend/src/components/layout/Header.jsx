@@ -51,28 +51,34 @@ export default function Header() {
           aria-controls="app-sidebar"
           onClick={toggleSidebar}
         >
-          <Menu size={20} strokeWidth={1.75} />
+          <Menu size={20} strokeWidth={1.75} aria-hidden="true" />
         </IconButton>
         <div className="header-copy">
           <p className="header-kicker">{meta.kicker}</p>
-          <p className="header-title">{meta.title}</p>
+          <p className="header-title" title={meta.title}>
+            {meta.title}
+          </p>
         </div>
       </div>
       <div className="header-end">
         <IconButton
           className="context-toggle"
-          label={contextOpen ? "Hide context panel" : "Show context panel"}
+          label={contextOpen ? "Hide stay context" : "Show stay context"}
           aria-expanded={contextOpen}
           aria-controls="context-panel"
           onClick={toggleContext}
         >
-          <PanelRight size={20} strokeWidth={1.75} />
+          <PanelRight size={20} strokeWidth={1.75} aria-hidden="true" />
         </IconButton>
-        <span className="workspace-chip">
+        <span className="workspace-chip" title={workspace.name}>
           <span className="workspace-dot" aria-hidden="true" />
           <span>{workspace.name}</span>
         </span>
-        <span className="profile-avatar" aria-label={`${workspace.profileLabel} profile`}>
+        <span
+          className="profile-avatar"
+          role="img"
+          aria-label={`${workspace.profileLabel} profile`}
+        >
           {workspace.initials}
         </span>
       </div>

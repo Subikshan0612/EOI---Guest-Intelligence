@@ -18,6 +18,8 @@ export default function ContextPanel() {
   const intelligence = conversation ? getLatestIntelligence(conversation) : null;
   const nights = stay ? nightsBetween(stay.checkIn, stay.checkOut) : null;
   const related = intelligence?.context?.relevantHistory ?? (guest?.notes ? [guest.notes] : []);
+  const risk = intelligence?.risk ?? null;
+  const riskReason = risk?.reason || risk?.reasons?.[0];
 
   return (
     <aside
@@ -32,7 +34,7 @@ export default function ContextPanel() {
           <h2 className="panel-title">Stay picture</h2>
         </div>
         <IconButton className="drawer-close" label="Close context panel" onClick={closeOverlays}>
-          <X size={18} strokeWidth={1.75} />
+          <X size={18} strokeWidth={1.75} aria-hidden="true" />
         </IconButton>
       </div>
 
@@ -72,7 +74,7 @@ export default function ContextPanel() {
           {intelligence?.signal ? (
             <p className="context-meta">{intelligence.signal.summary}</p>
           ) : conversation ? (
-            <p className="context-meta">{conversation.summary}</p>
+            <p className="context-meta">{conversation.summary || "No signal captured yet."}</p>
           ) : (
             <p className="muted">Recent guest and operational signals will collect here.</p>
           )}
@@ -80,10 +82,13 @@ export default function ContextPanel() {
 
         <section className="context-section">
           <h3>Risk</h3>
-          {intelligence?.risk ? (
-            <span className="risk-chip" data-level={intelligence.risk.level}>
-              {intelligence.risk.level} risk
-            </span>
+          {risk ? (
+            <div className="context-risk">
+              <span className="risk-chip" data-level={risk.level}>
+                {risk.level} risk
+              </span>
+              {riskReason ? <p className="context-meta">{riskReason}</p> : null}
+            </div>
           ) : (
             <p className="muted">{conversation ? "Not assessed yet." : "No active risk reading."}</p>
           )}

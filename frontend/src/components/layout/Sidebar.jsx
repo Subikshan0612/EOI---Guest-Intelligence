@@ -25,12 +25,12 @@ export default function Sidebar() {
       aria-label="KOI navigation"
     >
       <div className="sidebar-brand">
-        <Link to="/" className="sidebar-brand-copy">
+        <Link to="/" className="sidebar-brand-copy" onClick={closeOverlays}>
           <p className="sidebar-brand-title">KOI</p>
           <p className="sidebar-brand-tagline">Kolam Operational Intelligence</p>
         </Link>
         <IconButton className="sidebar-close" label="Close navigation" onClick={closeOverlays}>
-          <X size={18} strokeWidth={1.75} />
+          <X size={18} strokeWidth={1.75} aria-hidden="true" />
         </IconButton>
       </div>
 
@@ -41,7 +41,7 @@ export default function Sidebar() {
           className="primary-button new-intelligence-button"
           onClick={startNewIntelligence}
         >
-          <Plus size={18} strokeWidth={1.75} />
+          <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
           New Intelligence
         </NavLink>
       </div>
@@ -62,21 +62,22 @@ export default function Sidebar() {
             </div>
           ))
         ) : (
-          <p className="sidebar-empty">
-            No intelligence sessions yet. Start a new investigation to begin.
-          </p>
+          <div className="sidebar-empty" role="status">
+            <p>No intelligence sessions yet.</p>
+            <p>Start a new investigation to begin.</p>
+          </div>
         )}
       </nav>
 
       <div className="sidebar-footer">
         <p className="nav-label">Intelligence</p>
-        <NavLink to="/prompts" className="nav-link">
-          <BookOpen size={18} strokeWidth={1.75} />
+        <NavLink to="/prompts" className="nav-link" onClick={closeOverlays}>
+          <BookOpen size={18} strokeWidth={1.75} aria-hidden="true" />
           Prompt Library
         </NavLink>
         <p className="nav-label">Workspace</p>
-        <NavLink to="/settings" className="nav-link">
-          <Settings size={18} strokeWidth={1.75} />
+        <NavLink to="/settings" className="nav-link" onClick={closeOverlays}>
+          <Settings size={18} strokeWidth={1.75} aria-hidden="true" />
           Settings
         </NavLink>
       </div>

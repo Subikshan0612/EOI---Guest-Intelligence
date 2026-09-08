@@ -18,11 +18,22 @@ export function useChat({ conversationId = null, resetKey = "default" } = {}) {
   const [draft, setDraft] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
+  const [pendingConversation, setPendingConversation] = useState(null);
   const abortRef = useRef(null);
   const sessionRef = useRef(null);
   const sendingRef = useRef(false);
 
-  const conversation = stored ?? EMPTY_CONVERSATION;
+  const conversation =
+    stored ??
+    (pendingConversation && pendingConversation.id === (conversationId ?? sessionRef.current)
+      ? pendingConversation
+      : EMPTY_CONVERSATION);
+
+  useEffect(() => {
+    if (stored && pendingConversation && stored.id === pendingConversation.id) {
+      setPendingConversation(null);
+    }
+  }, [stored, pendingConversation]);
 
   useEffect(() => {
     return () => {
@@ -37,9 +48,13 @@ export function useChat({ conversationId = null, resetKey = "default" } = {}) {
 
     abortRef.current?.abort();
     abortRef.current = null;
+    sendingRef.current = false;
     sessionRef.current = conversationId;
     setDraft("");
     setError(null);
+    if (!conversationId) {
+      setPendingConversation(null);
+    }
 
     const current = conversationId ? getById(conversationId) : null;
     const last = current?.messages?.at(-1);
@@ -104,6 +119,7 @@ export function useChat({ conversationId = null, resetKey = "default" } = {}) {
       activeId = created.id;
       priorMessages = created.messages;
       sessionRef.current = activeId;
+      setPendingConversation(created);
       navigate(`/chat/${activeId}`, { replace: true });
     } else {
       priorMessages = [...getById(activeId).messages, userMessage];

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import { formatConversationMeta } from "../../utils/formatDate";
@@ -14,11 +14,22 @@ export default function ConversationItem({ conversation, onNavigate }) {
   const [draftTitle, setDraftTitle] = useState(conversation.title);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const rowRef = useRef(null);
+  const renameInputRef = useRef(null);
   const skipBlurRef = useRef(false);
+  const menuId = useId();
 
   useEffect(() => {
     setDraftTitle(conversation.title);
   }, [conversation.title]);
+
+  useEffect(() => {
+    if (!renaming) return undefined;
+    const node = renameInputRef.current;
+    if (!node) return undefined;
+    node.focus();
+    node.select();
+    return undefined;
+  }, [renaming]);
 
   useEffect(() => {
     if (!menuOpen && !renaming) return undefined;
@@ -88,8 +99,10 @@ export default function ConversationItem({ conversation, onNavigate }) {
           </label>
           <input
             id={`rename-${conversation.id}`}
+            ref={renameInputRef}
             value={draftTitle}
-            autoFocus
+            maxLength={120}
+            aria-label="Rename conversation"
             onChange={(event) => setDraftTitle(event.target.value)}
             onBlur={saveRename}
           />
@@ -100,6 +113,7 @@ export default function ConversationItem({ conversation, onNavigate }) {
             to={`/chat/${conversation.id}`}
             className="conversation-link"
             onClick={onNavigate}
+            title={conversation.title}
           >
             <span className="conversation-link-copy">
               <span>{conversation.title}</span>
@@ -111,18 +125,21 @@ export default function ConversationItem({ conversation, onNavigate }) {
             label={`Actions for ${conversation.title}`}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            onClick={() => {
+            aria-controls={menuOpen ? menuId : undefined}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
               setMenuOpen((open) => !open);
               setConfirmingDelete(false);
             }}
           >
-            <MoreHorizontal size={16} strokeWidth={1.75} />
+            <MoreHorizontal size={16} strokeWidth={1.75} aria-hidden="true" />
           </IconButton>
         </>
       )}
 
       {menuOpen && !renaming ? (
-        <div className="conversation-menu" role="menu">
+        <div id={menuId} className="conversation-menu" role="menu" aria-label="Conversation actions">
           <button
             type="button"
             role="menuitem"
