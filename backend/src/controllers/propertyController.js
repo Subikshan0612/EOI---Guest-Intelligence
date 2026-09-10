@@ -13,16 +13,20 @@ export const listProperties = asyncHandler(async (req, res) => {
 });
 
 export const getProperty = asyncHandler(async (req, res) => {
-  const data = await propertyService.getPropertyById(req.params.id);
+  const data = await propertyService.getPropertyById(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });
 
 export const updateProperty = asyncHandler(async (req, res) => {
-  const data = await propertyService.updateProperty(req.params.id, req.body);
+  const data = await propertyService.updateProperty(
+    req.params.id,
+    req.body,
+    req.query.workspaceId,
+  );
   sendSuccess(res, data);
 });
 
 export const deleteProperty = asyncHandler(async (req, res) => {
-  const data = await propertyService.deleteProperty(req.params.id);
+  const data = await propertyService.deleteProperty(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });

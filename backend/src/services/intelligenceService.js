@@ -11,6 +11,7 @@ import {
   assertExists,
   assertSameWorkspace,
   findByIdOr404,
+  findInWorkspaceOr404,
   paginateQuery,
   requireFields,
   toPlain,
@@ -83,11 +84,11 @@ export async function createIntelligence(body) {
 }
 
 export async function listIntelligence(query) {
+  const workspaceId = requireObjectId(query.workspaceId, "workspaceId");
   const pagination = parsePagination(query);
   const sort = parseSort(query, ["createdAt", "updatedAt"], { createdAt: -1 });
-  const filter = {};
+  const filter = { workspaceId };
 
-  if (query.workspaceId) filter.workspaceId = parseObjectId(query.workspaceId, "workspaceId");
   if (query.conversationId) {
     filter.conversationId = parseObjectId(query.conversationId, "conversationId");
   }
@@ -98,6 +99,9 @@ export async function listIntelligence(query) {
   return paginateQuery(Intelligence, filter, pagination, sort);
 }
 
-export async function getIntelligenceById(id) {
-  return toPlain(await findByIdOr404(Intelligence, requireObjectId(id), "Intelligence"));
+export async function getIntelligenceById(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  return toPlain(
+    await findInWorkspaceOr404(Intelligence, requireObjectId(id), scope, "Intelligence"),
+  );
 }

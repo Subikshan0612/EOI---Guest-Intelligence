@@ -13,11 +13,15 @@ export const listOutcomes = asyncHandler(async (req, res) => {
 });
 
 export const getOutcome = asyncHandler(async (req, res) => {
-  const data = await outcomeService.getOutcomeById(req.params.id);
+  const data = await outcomeService.getOutcomeById(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });
 
 export const updateOutcome = asyncHandler(async (req, res) => {
-  const data = await outcomeService.updateOutcome(req.params.id, req.body);
+  const data = await outcomeService.updateOutcome(
+    req.params.id,
+    req.body,
+    req.query.workspaceId,
+  );
   sendSuccess(res, data);
 });

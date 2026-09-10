@@ -13,16 +13,16 @@ export const listStays = asyncHandler(async (req, res) => {
 });
 
 export const getStay = asyncHandler(async (req, res) => {
-  const data = await stayService.getStayById(req.params.id);
+  const data = await stayService.getStayById(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });
 
 export const updateStay = asyncHandler(async (req, res) => {
-  const data = await stayService.updateStay(req.params.id, req.body);
+  const data = await stayService.updateStay(req.params.id, req.body, req.query.workspaceId);
   sendSuccess(res, data);
 });
 
 export const deleteStay = asyncHandler(async (req, res) => {
-  const data = await stayService.deleteStay(req.params.id);
+  const data = await stayService.deleteStay(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });

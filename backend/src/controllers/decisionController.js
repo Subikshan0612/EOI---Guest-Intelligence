@@ -13,11 +13,15 @@ export const listDecisions = asyncHandler(async (req, res) => {
 });
 
 export const getDecision = asyncHandler(async (req, res) => {
-  const data = await decisionService.getDecisionById(req.params.id);
+  const data = await decisionService.getDecisionById(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });
 
 export const updateDecision = asyncHandler(async (req, res) => {
-  const data = await decisionService.updateDecision(req.params.id, req.body);
+  const data = await decisionService.updateDecision(
+    req.params.id,
+    req.body,
+    req.query.workspaceId,
+  );
   sendSuccess(res, data);
 });

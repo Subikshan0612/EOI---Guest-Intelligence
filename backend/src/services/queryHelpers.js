@@ -18,10 +18,46 @@ export async function assertExists(Model, id, label = "Resource") {
   return id;
 }
 
-export async function assertSameWorkspace(document, workspaceId, label = "Resource") {
+/**
+ * Synchronous workspace-ownership guard.
+ *
+ * This intentionally does no async work: it compares two ids that the caller
+ * has already loaded. Keeping it synchronous means every call site fails
+ * cleanly through the normal AppError path instead of producing an unhandled
+ * promise rejection when the guard is not awaited.
+ */
+export function assertSameWorkspace(document, workspaceId, label = "Resource") {
   if (!document || !workspaceId) return;
   if (String(document.workspaceId) !== String(workspaceId)) {
     throw new AppError(`${label} does not belong to the given workspace`, 400);
+  }
+}
+
+/**
+ * Loads a tenant-owned document scoped to a workspace.
+ *
+ * Returns a 404 (never a 403) when the document exists but belongs to another
+ * workspace, so callers cannot probe for the existence of other tenants' data.
+ */
+export async function findInWorkspaceOr404(Model, id, workspaceId, label = "Resource") {
+  const document = await Model.findOne({ _id: id, workspaceId });
+  if (!document) {
+    throw new AppError(`${label} not found`, 404);
+  }
+  return document;
+}
+
+/**
+ * Blocks tenant reassignment through an update: a PATCH may echo the resource's
+ * own workspaceId, but must never point it at a different workspace.
+ */
+export function assertWorkspaceUnchanged(body, document) {
+  if (
+    body?.workspaceId !== undefined &&
+    document?.workspaceId !== undefined &&
+    String(body.workspaceId) !== String(document.workspaceId)
+  ) {
+    throw new AppError("workspaceId cannot be changed", 400);
   }
 }
 

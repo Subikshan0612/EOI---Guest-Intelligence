@@ -70,6 +70,41 @@ async function expectStatus(name, method, path, body, expectedStatus) {
   return result;
 }
 
+async function expectStatusOneOf(name, method, path, body, expectedStatuses) {
+  const result = await request(method, path, body);
+  if (expectedStatuses.includes(result.status)) {
+    ok(name, `HTTP ${result.status}`);
+  } else {
+    fail(
+      name,
+      `expected one of [${expectedStatuses.join(", ")}], got ${result.status}: ${JSON.stringify(
+        result.json,
+      )}`,
+    );
+  }
+  return result;
+}
+
+/**
+ * Defensive cleanup tracking: if an isolation guard is broken and a
+ * cross-workspace write unexpectedly succeeds, still capture the id so the
+ * document is removed during cleanup.
+ */
+function trackCreated(result, bucket) {
+  const id = result?.json?.data?._id;
+  if (id && !created[bucket].includes(id)) created[bucket].push(id);
+  return id;
+}
+
+function assertListExcludes(name, result, forbiddenId) {
+  const rows = result?.json?.data || [];
+  if (rows.some((row) => String(row?._id) === String(forbiddenId))) {
+    fail(name, `list leaked foreign id ${forbiddenId}`);
+  } else {
+    ok(name, `${rows.length} row(s), no foreign data`);
+  }
+}
+
 async function cleanup() {
   await connectDatabase();
   await Promise.all([
@@ -179,12 +214,18 @@ async function main() {
     "unit create",
     "POST",
     "/units",
-    { propertyId, unitNumber: "402", type: "apartment" },
+    { workspaceId, propertyId, unitNumber: "402", type: "apartment" },
     201,
   );
   const unitId = unit.json?.data?._id;
   created.unitIds.push(unitId);
-  await expectStatus("unit list", "GET", `/units?propertyId=${propertyId}`, null, 200);
+  await expectStatus(
+    "unit list",
+    "GET",
+    `/units?workspaceId=${workspaceId}&propertyId=${propertyId}`,
+    null,
+    200,
+  );
 
   const guest = await expectStatus(
     "guest create",
@@ -283,7 +324,7 @@ async function main() {
   const message = await expectStatus(
     "message create",
     "POST",
-    `/conversations/${conversationId}/messages`,
+    `/conversations/${conversationId}/messages?workspaceId=${workspaceId}`,
     { role: "user", type: "text", content: "Guest says AC is not cooling." },
     201,
   );
@@ -291,7 +332,7 @@ async function main() {
   await expectStatus(
     "message list",
     "GET",
-    `/conversations/${conversationId}/messages`,
+    `/conversations/${conversationId}/messages?workspaceId=${workspaceId}`,
     null,
     200,
   );
@@ -403,6 +444,192 @@ async function main() {
   );
   if (paged.json?.pagination?.limit === 1) ok("pagination shape");
   else fail("pagination shape", JSON.stringify(paged.json?.pagination));
+
+  // ============================================================
+  // Tenant / workspace isolation
+  // ============================================================
+  console.log("\n--- tenant isolation ---");
+
+  const wsA = workspaceId;
+  const CROSS = [403, 404];
+
+  const wsBRes = await expectStatus(
+    "iso: workspace B create",
+    "POST",
+    "/workspaces",
+    { name: `Phase 2D WS B ${stamp}`, slug: `phase-2d-ws-b-${stamp}` },
+    201,
+  );
+  const wsB = trackCreated(wsBRes, "workspaceIds");
+
+  const propBRes = await expectStatus(
+    "iso: property B create",
+    "POST",
+    "/properties",
+    { workspaceId: wsB, name: "B Residences", code: `BR${stamp}` },
+    201,
+  );
+  const propB = trackCreated(propBRes, "propertyIds");
+
+  const unitBRes = await expectStatus(
+    "iso: unit B create",
+    "POST",
+    "/units",
+    { workspaceId: wsB, propertyId: propB, unitNumber: "B1" },
+    201,
+  );
+  const unitB = trackCreated(unitBRes, "unitIds");
+
+  const guestBRes = await expectStatus(
+    "iso: guest B create",
+    "POST",
+    "/guests",
+    { workspaceId: wsB, firstName: "Bianca", lastName: "Bauer" },
+    201,
+  );
+  const guestB = trackCreated(guestBRes, "guestIds");
+
+  const stayBRes = await expectStatus(
+    "iso: stay B create",
+    "POST",
+    "/stays",
+    { workspaceId: wsB, guestId: guestB, propertyId: propB, unitId: unitB, status: "reserved" },
+    201,
+  );
+  const stayB = trackCreated(stayBRes, "stayIds");
+
+  const signalBRes = await expectStatus(
+    "iso: signal B create",
+    "POST",
+    "/signals",
+    { workspaceId: wsB, type: "maintenance", title: "B signal" },
+    201,
+  );
+  const signalB = trackCreated(signalBRes, "signalIds");
+
+  const convBRes = await expectStatus(
+    "iso: conversation B create",
+    "POST",
+    "/conversations",
+    { workspaceId: wsB, title: "B conversation" },
+    201,
+  );
+  const convB = trackCreated(convBRes, "conversationIds");
+
+  const intelBRes = await expectStatus(
+    "iso: intelligence B create",
+    "POST",
+    "/intelligence",
+    { workspaceId: wsB, intelligence: { summary: "B" } },
+    201,
+  );
+  const intelB = trackCreated(intelBRes, "intelligenceIds");
+
+  const decisionBRes = await expectStatus(
+    "iso: decision B create",
+    "POST",
+    "/decisions",
+    { workspaceId: wsB, intelligenceId: intelB, description: "B decision" },
+    201,
+  );
+  const decisionB = trackCreated(decisionBRes, "decisionIds");
+
+  const actionBRes = await expectStatus(
+    "iso: action B create",
+    "POST",
+    "/actions",
+    { workspaceId: wsB, intelligenceId: intelB, description: "B action" },
+    201,
+  );
+  const actionB = trackCreated(actionBRes, "actionIds");
+
+  const outcomeBRes = await expectStatus(
+    "iso: outcome B create",
+    "POST",
+    "/outcomes",
+    { workspaceId: wsB, intelligenceId: intelB },
+    201,
+  );
+  const outcomeB = trackCreated(outcomeBRes, "outcomeIds");
+
+  // --- By-id reads scoped to the caller's workspace (A) ---
+  await expectStatusOneOf("A: A cannot GET B property", "GET", `/properties/${propB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatusOneOf("B: A cannot PATCH B property", "PATCH", `/properties/${propB}?workspaceId=${wsA}`, { name: "hijack" }, CROSS);
+  await expectStatusOneOf("D: A cannot GET B guest", "GET", `/guests/${guestB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatusOneOf("E: A cannot GET B stay", "GET", `/stays/${stayB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatusOneOf("F: A cannot GET B conversation", "GET", `/conversations/${convB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatusOneOf("F2: A cannot GET B unit (via property)", "GET", `/units/${unitB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatusOneOf("F3: A cannot GET B intelligence", "GET", `/intelligence/${intelB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatusOneOf("F4: A cannot GET B decision", "GET", `/decisions/${decisionB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatusOneOf("F5: A cannot GET B action", "GET", `/actions/${actionB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatusOneOf("F6: A cannot GET B outcome", "GET", `/outcomes/${outcomeB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatusOneOf("F7: A cannot LIST B messages", "GET", `/conversations/${convB}/messages?workspaceId=${wsA}`, null, CROSS);
+  await expectStatusOneOf("F8: A cannot POST message into B conversation", "POST", `/conversations/${convB}/messages?workspaceId=${wsA}`, { role: "user", content: "leak" }, CROSS);
+
+  // --- Cross-workspace references rejected on create ---
+  trackCreated(await expectStatus("G: stay A !ref guest B", "POST", "/stays", { workspaceId: wsA, guestId: guestB, propertyId }, 400), "stayIds");
+  trackCreated(await expectStatus("H: stay A !ref property B", "POST", "/stays", { workspaceId: wsA, guestId, propertyId: propB }, 400), "stayIds");
+  trackCreated(await expectStatus("I: stay A !ref unit B", "POST", "/stays", { workspaceId: wsA, guestId, propertyId, unitId: unitB }, 400), "stayIds");
+
+  trackCreated(await expectStatus("J: signal A !ref guest B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", guestId: guestB }, 400), "signalIds");
+  trackCreated(await expectStatus("K: signal A !ref stay B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", stayId: stayB }, 400), "signalIds");
+  trackCreated(await expectStatus("L: signal A !ref property B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", propertyId: propB }, 400), "signalIds");
+  trackCreated(await expectStatus("M: signal A !ref unit B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", unitId: unitB }, 400), "signalIds");
+
+  trackCreated(await expectStatus("N: conversation A !ref signal B", "POST", "/conversations", { workspaceId: wsA, signalIds: [signalB] }, 400), "conversationIds");
+
+  trackCreated(await expectStatus("O: intelligence A !ref conversation B", "POST", "/intelligence", { workspaceId: wsA, conversationId: convB }, 400), "intelligenceIds");
+  trackCreated(await expectStatus("P: intelligence A !ref signal B", "POST", "/intelligence", { workspaceId: wsA, signalIds: [signalB] }, 400), "intelligenceIds");
+
+  trackCreated(await expectStatus("Q: decision A !ref intelligence B", "POST", "/decisions", { workspaceId: wsA, intelligenceId: intelB, description: "x" }, 400), "decisionIds");
+
+  trackCreated(await expectStatus("R1: action A !ref intelligence B", "POST", "/actions", { workspaceId: wsA, intelligenceId: intelB, description: "x" }, 400), "actionIds");
+  trackCreated(await expectStatus("R2: action A !ref decision B", "POST", "/actions", { workspaceId: wsA, intelligenceId, decisionId: decisionB, description: "x" }, 400), "actionIds");
+
+  trackCreated(await expectStatus("S1: outcome A !ref intelligence B", "POST", "/outcomes", { workspaceId: wsA, intelligenceId: intelB }, 400), "outcomeIds");
+  trackCreated(await expectStatus("S2: outcome A !ref action B", "POST", "/outcomes", { workspaceId: wsA, intelligenceId, actionId: actionB }, 400), "outcomeIds");
+
+  // --- T: list endpoints never return another workspace's rows ---
+  assertListExcludes("T: properties list scoped", await request("GET", `/properties?workspaceId=${wsA}&limit=100`), propB);
+  assertListExcludes("T: units list scoped", await request("GET", `/units?workspaceId=${wsA}&limit=100`), unitB);
+  assertListExcludes("T: guests list scoped", await request("GET", `/guests?workspaceId=${wsA}&limit=100`), guestB);
+  assertListExcludes("T: stays list scoped", await request("GET", `/stays?workspaceId=${wsA}&limit=100`), stayB);
+  assertListExcludes("T: signals list scoped", await request("GET", `/signals?workspaceId=${wsA}&limit=100`), signalB);
+  assertListExcludes("T: conversations list scoped", await request("GET", `/conversations?workspaceId=${wsA}&limit=100`), convB);
+  assertListExcludes("T: intelligence list scoped", await request("GET", `/intelligence?workspaceId=${wsA}&limit=100`), intelB);
+  assertListExcludes("T: decisions list scoped", await request("GET", `/decisions?workspaceId=${wsA}&limit=100`), decisionB);
+  assertListExcludes("T: actions list scoped", await request("GET", `/actions?workspaceId=${wsA}&limit=100`), actionB);
+  assertListExcludes("T: outcomes list scoped", await request("GET", `/outcomes?workspaceId=${wsA}&limit=100`), outcomeB);
+
+  // --- T: tenant-owned list without workspaceId -> clean 400, never a full dump ---
+  await expectStatus("T: properties list requires workspaceId", "GET", "/properties", null, 400);
+  await expectStatus("T: units list requires workspaceId", "GET", "/units", null, 400);
+  await expectStatus("T: guests list requires workspaceId", "GET", "/guests", null, 400);
+  await expectStatus("T: stays list requires workspaceId", "GET", "/stays", null, 400);
+  await expectStatus("T: signals list requires workspaceId", "GET", "/signals", null, 400);
+  await expectStatus("T: conversations list requires workspaceId", "GET", "/conversations", null, 400);
+  await expectStatus("T: intelligence list requires workspaceId", "GET", "/intelligence", null, 400);
+  await expectStatus("T: decisions list requires workspaceId", "GET", "/decisions", null, 400);
+  await expectStatus("T: actions list requires workspaceId", "GET", "/actions", null, 400);
+  await expectStatus("T: outcomes list requires workspaceId", "GET", "/outcomes", null, 400);
+
+  // --- U: PATCH cannot move a resource to another workspace ---
+  await expectStatus("U: PATCH cannot change workspaceId", "PATCH", `/properties/${propertyId}?workspaceId=${wsA}`, { workspaceId: wsB, name: "still A" }, 400);
+  const uCheck = await request("GET", `/properties/${propertyId}?workspaceId=${wsA}`);
+  if (String(uCheck.json?.data?.workspaceId) === String(wsA)) ok("U: property A still in workspace A");
+  else fail("U: property A still in workspace A", JSON.stringify(uCheck.json?.data?.workspaceId));
+
+  // --- Regression: generic validation behavior is unchanged ---
+  await expectStatus("reg: malformed id still 400", "GET", `/properties/not-an-id?workspaceId=${wsA}`, null, 400);
+  await expectStatus("reg: unknown reference still 404", "GET", `/properties/64b64c4f2f1c2e0012345678?workspaceId=${wsA}`, null, 404);
+  await expectStatus("reg: duplicate constraint still 409", "POST", "/properties", { workspaceId: wsB, name: "Dupe", code: `BR${stamp}` }, 409);
+  await expectStatus("reg: in-workspace CRUD still works", "GET", `/properties/${propertyId}?workspaceId=${wsA}`, null, 200);
+
+  // --- C & V: destructive cross-workspace attempts, run last; targets must survive ---
+  await expectStatusOneOf("C: A cannot DELETE B property", "DELETE", `/properties/${propB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatus("C: B property survived", "GET", `/properties/${propB}?workspaceId=${wsB}`, null, 200);
+  await expectStatusOneOf("V: A cannot DELETE B guest", "DELETE", `/guests/${guestB}?workspaceId=${wsA}`, null, CROSS);
+  await expectStatus("V: B guest survived", "GET", `/guests/${guestB}?workspaceId=${wsB}`, null, 200);
 
   await cleanup();
   ok("mongodb cleanup");

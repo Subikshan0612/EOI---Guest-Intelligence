@@ -14,22 +14,36 @@ export const listConversations = asyncHandler(async (req, res) => {
 });
 
 export const getConversation = asyncHandler(async (req, res) => {
-  const data = await conversationService.getConversationById(req.params.id);
+  const data = await conversationService.getConversationById(
+    req.params.id,
+    req.query.workspaceId,
+  );
   sendSuccess(res, data);
 });
 
 export const updateConversation = asyncHandler(async (req, res) => {
-  const data = await conversationService.updateConversation(req.params.id, req.body);
+  const data = await conversationService.updateConversation(
+    req.params.id,
+    req.body,
+    req.query.workspaceId,
+  );
   sendSuccess(res, data);
 });
 
 export const deleteConversation = asyncHandler(async (req, res) => {
-  const data = await conversationService.deleteConversation(req.params.id);
+  const data = await conversationService.deleteConversation(
+    req.params.id,
+    req.query.workspaceId,
+  );
   sendSuccess(res, data);
 });
 
 export const createMessage = asyncHandler(async (req, res) => {
-  const data = await messageService.createMessage(req.params.conversationId, req.body);
+  const data = await messageService.createMessage(
+    req.params.conversationId,
+    req.body,
+    req.query.workspaceId,
+  );
   sendSuccess(res, data, 201);
 });
 
@@ -37,6 +51,7 @@ export const listMessages = asyncHandler(async (req, res) => {
   const { items, pagination } = await messageService.listMessages(
     req.params.conversationId,
     req.query,
+    req.query.workspaceId,
   );
   sendList(res, items, pagination);
 });

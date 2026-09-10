@@ -13,6 +13,9 @@ export const listIntelligence = asyncHandler(async (req, res) => {
 });
 
 export const getIntelligence = asyncHandler(async (req, res) => {
-  const data = await intelligenceService.getIntelligenceById(req.params.id);
+  const data = await intelligenceService.getIntelligenceById(
+    req.params.id,
+    req.query.workspaceId,
+  );
   sendSuccess(res, data);
 });

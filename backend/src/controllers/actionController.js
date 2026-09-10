@@ -13,11 +13,11 @@ export const listActions = asyncHandler(async (req, res) => {
 });
 
 export const getAction = asyncHandler(async (req, res) => {
-  const data = await actionService.getActionById(req.params.id);
+  const data = await actionService.getActionById(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });
 
 export const updateAction = asyncHandler(async (req, res) => {
-  const data = await actionService.updateAction(req.params.id, req.body);
+  const data = await actionService.updateAction(req.params.id, req.body, req.query.workspaceId);
   sendSuccess(res, data);
 });

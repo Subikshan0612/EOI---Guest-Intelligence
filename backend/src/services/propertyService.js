@@ -1,11 +1,12 @@
 import { Property } from "../models/Property.js";
 import { Workspace } from "../models/Workspace.js";
 import { AppError } from "../utils/AppError.js";
-import { parseObjectId, requireObjectId } from "../utils/objectId.js";
+import { requireObjectId } from "../utils/objectId.js";
 import { parsePagination, parseSort } from "../utils/pagination.js";
 import {
   assertExists,
-  findByIdOr404,
+  assertWorkspaceUnchanged,
+  findInWorkspaceOr404,
   paginateQuery,
   pickDefined,
   requireFields,
@@ -32,23 +33,26 @@ export async function createProperty(body) {
 }
 
 export async function listProperties(query) {
+  const workspaceId = requireObjectId(query.workspaceId, "workspaceId");
   const pagination = parsePagination(query);
   const sort = parseSort(query, ["createdAt", "updatedAt", "name", "code"], { createdAt: -1 });
-  const filter = {};
+  const filter = { workspaceId };
 
-  if (query.workspaceId) filter.workspaceId = parseObjectId(query.workspaceId, "workspaceId");
   if (query.status) filter.status = query.status;
   if (query.code) filter.code = String(query.code).toUpperCase();
 
   return paginateQuery(Property, filter, pagination, sort);
 }
 
-export async function getPropertyById(id) {
-  return toPlain(await findByIdOr404(Property, requireObjectId(id), "Property"));
+export async function getPropertyById(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  return toPlain(await findInWorkspaceOr404(Property, requireObjectId(id), scope, "Property"));
 }
 
-export async function updateProperty(id, body) {
-  const property = await findByIdOr404(Property, requireObjectId(id), "Property");
+export async function updateProperty(id, body, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const property = await findInWorkspaceOr404(Property, requireObjectId(id), scope, "Property");
+  assertWorkspaceUnchanged(body, property);
   const updates = pickDefined(body, UPDATABLE);
 
   if (Object.keys(updates).length === 0) {
@@ -60,8 +64,9 @@ export async function updateProperty(id, body) {
   return toPlain(property);
 }
 
-export async function deleteProperty(id) {
-  const property = await findByIdOr404(Property, requireObjectId(id), "Property");
+export async function deleteProperty(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const property = await findInWorkspaceOr404(Property, requireObjectId(id), scope, "Property");
   await property.deleteOne();
   return toPlain(property);
 }

@@ -10,7 +10,9 @@ import { parsePagination, parseSort } from "../utils/pagination.js";
 import {
   assertExists,
   assertSameWorkspace,
+  assertWorkspaceUnchanged,
   findByIdOr404,
+  findInWorkspaceOr404,
   paginateQuery,
   pickDefined,
   requireFields,
@@ -39,7 +41,9 @@ async function validateOptionalRefs(workspaceId, refs) {
     assertSameWorkspace(property, workspaceId, "Property");
   }
   if (refs.unitId) {
-    await assertExists(Unit, refs.unitId, "Unit");
+    const unit = await findByIdOr404(Unit, refs.unitId, "Unit");
+    const unitProperty = await findByIdOr404(Property, unit.propertyId, "Property");
+    assertSameWorkspace(unitProperty, workspaceId, "Unit");
   }
   if (refs.guestId) {
     const guest = await findByIdOr404(Guest, refs.guestId, "Guest");
@@ -87,9 +91,8 @@ export async function listSignals(query) {
   const sort = parseSort(query, ["createdAt", "updatedAt", "occurredAt", "severity"], {
     createdAt: -1,
   });
-  const filter = {};
+  const filter = { workspaceId: requireObjectId(query.workspaceId, "workspaceId") };
 
-  if (query.workspaceId) filter.workspaceId = parseObjectId(query.workspaceId, "workspaceId");
   if (query.propertyId) filter.propertyId = parseObjectId(query.propertyId, "propertyId");
   if (query.unitId) filter.unitId = parseObjectId(query.unitId, "unitId");
   if (query.guestId) filter.guestId = parseObjectId(query.guestId, "guestId");
@@ -101,12 +104,15 @@ export async function listSignals(query) {
   return paginateQuery(Signal, filter, pagination, sort);
 }
 
-export async function getSignalById(id) {
-  return toPlain(await findByIdOr404(Signal, requireObjectId(id), "Signal"));
+export async function getSignalById(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  return toPlain(await findInWorkspaceOr404(Signal, requireObjectId(id), scope, "Signal"));
 }
 
-export async function updateSignal(id, body) {
-  const signal = await findByIdOr404(Signal, requireObjectId(id), "Signal");
+export async function updateSignal(id, body, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const signal = await findInWorkspaceOr404(Signal, requireObjectId(id), scope, "Signal");
+  assertWorkspaceUnchanged(body, signal);
   const updates = pickDefined(body, UPDATABLE);
 
   if (Object.keys(updates).length === 0) {
@@ -131,8 +137,9 @@ export async function updateSignal(id, body) {
   return toPlain(signal);
 }
 
-export async function deleteSignal(id) {
-  const signal = await findByIdOr404(Signal, requireObjectId(id), "Signal");
+export async function deleteSignal(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const signal = await findInWorkspaceOr404(Signal, requireObjectId(id), scope, "Signal");
   await signal.deleteOne();
   return toPlain(signal);
 }

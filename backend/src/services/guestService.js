@@ -1,11 +1,12 @@
 import { Guest } from "../models/Guest.js";
 import { Workspace } from "../models/Workspace.js";
 import { AppError } from "../utils/AppError.js";
-import { parseObjectId, requireObjectId } from "../utils/objectId.js";
+import { requireObjectId } from "../utils/objectId.js";
 import { parsePagination, parseSort } from "../utils/pagination.js";
 import {
   assertExists,
-  findByIdOr404,
+  assertWorkspaceUnchanged,
+  findInWorkspaceOr404,
   paginateQuery,
   pickDefined,
   requireFields,
@@ -42,13 +43,13 @@ export async function createGuest(body) {
 }
 
 export async function listGuests(query) {
+  const workspaceId = requireObjectId(query.workspaceId, "workspaceId");
   const pagination = parsePagination(query);
   const sort = parseSort(query, ["createdAt", "updatedAt", "lastName", "firstName"], {
     createdAt: -1,
   });
-  const filter = {};
+  const filter = { workspaceId };
 
-  if (query.workspaceId) filter.workspaceId = parseObjectId(query.workspaceId, "workspaceId");
   if (query.email) filter.email = String(query.email).toLowerCase();
   if (query.externalId) filter.externalId = query.externalId;
 
@@ -60,12 +61,15 @@ export async function listGuests(query) {
   return paginateQuery(Guest, filter, pagination, sort);
 }
 
-export async function getGuestById(id) {
-  return toPlain(await findByIdOr404(Guest, requireObjectId(id), "Guest"));
+export async function getGuestById(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  return toPlain(await findInWorkspaceOr404(Guest, requireObjectId(id), scope, "Guest"));
 }
 
-export async function updateGuest(id, body) {
-  const guest = await findByIdOr404(Guest, requireObjectId(id), "Guest");
+export async function updateGuest(id, body, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const guest = await findInWorkspaceOr404(Guest, requireObjectId(id), scope, "Guest");
+  assertWorkspaceUnchanged(body, guest);
   const updates = pickDefined(body, UPDATABLE);
 
   if (Object.keys(updates).length === 0) {
@@ -77,8 +81,9 @@ export async function updateGuest(id, body) {
   return toPlain(guest);
 }
 
-export async function deleteGuest(id) {
-  const guest = await findByIdOr404(Guest, requireObjectId(id), "Guest");
+export async function deleteGuest(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const guest = await findInWorkspaceOr404(Guest, requireObjectId(id), scope, "Guest");
   await guest.deleteOne();
   return toPlain(guest);
 }

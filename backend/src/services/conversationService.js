@@ -9,7 +9,9 @@ import { parsePagination, parseSort } from "../utils/pagination.js";
 import {
   assertExists,
   assertSameWorkspace,
+  assertWorkspaceUnchanged,
   findByIdOr404,
+  findInWorkspaceOr404,
   paginateQuery,
   pickDefined,
   requireFields,
@@ -67,11 +69,11 @@ export async function createConversation(body) {
 }
 
 export async function listConversations(query) {
+  const workspaceId = requireObjectId(query.workspaceId, "workspaceId");
   const pagination = parsePagination(query);
   const sort = parseSort(query, ["createdAt", "updatedAt", "title"], { updatedAt: -1 });
-  const filter = {};
+  const filter = { workspaceId };
 
-  if (query.workspaceId) filter.workspaceId = parseObjectId(query.workspaceId, "workspaceId");
   if (query.guestId) filter.guestId = parseObjectId(query.guestId, "guestId");
   if (query.stayId) filter.stayId = parseObjectId(query.stayId, "stayId");
   if (query.status) filter.status = query.status;
@@ -79,12 +81,22 @@ export async function listConversations(query) {
   return paginateQuery(Conversation, filter, pagination, sort);
 }
 
-export async function getConversationById(id) {
-  return toPlain(await findByIdOr404(Conversation, requireObjectId(id), "Conversation"));
+export async function getConversationById(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  return toPlain(
+    await findInWorkspaceOr404(Conversation, requireObjectId(id), scope, "Conversation"),
+  );
 }
 
-export async function updateConversation(id, body) {
-  const conversation = await findByIdOr404(Conversation, requireObjectId(id), "Conversation");
+export async function updateConversation(id, body, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const conversation = await findInWorkspaceOr404(
+    Conversation,
+    requireObjectId(id),
+    scope,
+    "Conversation",
+  );
+  assertWorkspaceUnchanged(body, conversation);
   const updates = pickDefined(body, UPDATABLE);
 
   if (Object.keys(updates).length === 0) {
@@ -110,8 +122,14 @@ export async function updateConversation(id, body) {
   return toPlain(conversation);
 }
 
-export async function deleteConversation(id) {
-  const conversation = await findByIdOr404(Conversation, requireObjectId(id), "Conversation");
+export async function deleteConversation(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const conversation = await findInWorkspaceOr404(
+    Conversation,
+    requireObjectId(id),
+    scope,
+    "Conversation",
+  );
   await conversation.deleteOne();
   return toPlain(conversation);
 }

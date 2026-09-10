@@ -13,16 +13,16 @@ export const listGuests = asyncHandler(async (req, res) => {
 });
 
 export const getGuest = asyncHandler(async (req, res) => {
-  const data = await guestService.getGuestById(req.params.id);
+  const data = await guestService.getGuestById(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });
 
 export const updateGuest = asyncHandler(async (req, res) => {
-  const data = await guestService.updateGuest(req.params.id, req.body);
+  const data = await guestService.updateGuest(req.params.id, req.body, req.query.workspaceId);
   sendSuccess(res, data);
 });
 
 export const deleteGuest = asyncHandler(async (req, res) => {
-  const data = await guestService.deleteGuest(req.params.id);
+  const data = await guestService.deleteGuest(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });

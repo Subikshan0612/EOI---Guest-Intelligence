@@ -13,16 +13,16 @@ export const listUnits = asyncHandler(async (req, res) => {
 });
 
 export const getUnit = asyncHandler(async (req, res) => {
-  const data = await unitService.getUnitById(req.params.id);
+  const data = await unitService.getUnitById(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });
 
 export const updateUnit = asyncHandler(async (req, res) => {
-  const data = await unitService.updateUnit(req.params.id, req.body);
+  const data = await unitService.updateUnit(req.params.id, req.body, req.query.workspaceId);
   sendSuccess(res, data);
 });
 
 export const deleteUnit = asyncHandler(async (req, res) => {
-  const data = await unitService.deleteUnit(req.params.id);
+  const data = await unitService.deleteUnit(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });

@@ -8,7 +8,9 @@ import { parsePagination, parseSort } from "../utils/pagination.js";
 import {
   assertExists,
   assertSameWorkspace,
+  assertWorkspaceUnchanged,
   findByIdOr404,
+  findInWorkspaceOr404,
   paginateQuery,
   pickDefined,
   requireFields,
@@ -58,11 +60,11 @@ export async function createAction(body) {
 }
 
 export async function listActions(query) {
+  const workspaceId = requireObjectId(query.workspaceId, "workspaceId");
   const pagination = parsePagination(query);
   const sort = parseSort(query, ["createdAt", "updatedAt", "dueAt"], { createdAt: -1 });
-  const filter = {};
+  const filter = { workspaceId };
 
-  if (query.workspaceId) filter.workspaceId = parseObjectId(query.workspaceId, "workspaceId");
   if (query.intelligenceId) {
     filter.intelligenceId = parseObjectId(query.intelligenceId, "intelligenceId");
   }
@@ -73,12 +75,15 @@ export async function listActions(query) {
   return paginateQuery(Action, filter, pagination, sort);
 }
 
-export async function getActionById(id) {
-  return toPlain(await findByIdOr404(Action, requireObjectId(id), "Action"));
+export async function getActionById(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  return toPlain(await findInWorkspaceOr404(Action, requireObjectId(id), scope, "Action"));
 }
 
-export async function updateAction(id, body) {
-  const action = await findByIdOr404(Action, requireObjectId(id), "Action");
+export async function updateAction(id, body, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const action = await findInWorkspaceOr404(Action, requireObjectId(id), scope, "Action");
+  assertWorkspaceUnchanged(body, action);
   const updates = pickDefined(body, UPDATABLE);
 
   if (Object.keys(updates).length === 0) {

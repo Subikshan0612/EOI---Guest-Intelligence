@@ -2,12 +2,26 @@ import { Conversation } from "../models/Conversation.js";
 import { Message } from "../models/Message.js";
 import { requireObjectId } from "../utils/objectId.js";
 import { parsePagination, parseSort } from "../utils/pagination.js";
-import { findByIdOr404, paginateQuery, requireFields, toPlain } from "./queryHelpers.js";
+import {
+  findByIdOr404,
+  findInWorkspaceOr404,
+  paginateQuery,
+  requireFields,
+  toPlain,
+} from "./queryHelpers.js";
 
-export async function createMessage(conversationId, body) {
-  const conversation = await findByIdOr404(
+/**
+ * Message carries no workspaceId of its own. Tenant isolation for messages is
+ * enforced entirely through the parent Conversation: a caller must supply the
+ * workspace that owns the conversation, and a conversation from another
+ * workspace resolves to a 404.
+ */
+export async function createMessage(conversationId, body, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const conversation = await findInWorkspaceOr404(
     Conversation,
     requireObjectId(conversationId, "conversationId"),
+    scope,
     "Conversation",
   );
 
@@ -27,9 +41,10 @@ export async function createMessage(conversationId, body) {
   return toPlain(message);
 }
 
-export async function listMessages(conversationId, query) {
+export async function listMessages(conversationId, query, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
   const conversationObjectId = requireObjectId(conversationId, "conversationId");
-  await findByIdOr404(Conversation, conversationObjectId, "Conversation");
+  await findInWorkspaceOr404(Conversation, conversationObjectId, scope, "Conversation");
 
   const pagination = parsePagination(query);
   const sort = parseSort(query, ["createdAt"], { createdAt: 1 });

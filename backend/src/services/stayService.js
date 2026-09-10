@@ -9,7 +9,9 @@ import { parsePagination, parseSort } from "../utils/pagination.js";
 import {
   assertExists,
   assertSameWorkspace,
+  assertWorkspaceUnchanged,
   findByIdOr404,
+  findInWorkspaceOr404,
   paginateQuery,
   pickDefined,
   requireFields,
@@ -74,13 +76,13 @@ export async function createStay(body) {
 }
 
 export async function listStays(query) {
+  const workspaceId = requireObjectId(query.workspaceId, "workspaceId");
   const pagination = parsePagination(query);
   const sort = parseSort(query, ["createdAt", "updatedAt", "checkIn", "checkOut"], {
     createdAt: -1,
   });
-  const filter = {};
+  const filter = { workspaceId };
 
-  if (query.workspaceId) filter.workspaceId = parseObjectId(query.workspaceId, "workspaceId");
   if (query.guestId) filter.guestId = parseObjectId(query.guestId, "guestId");
   if (query.propertyId) filter.propertyId = parseObjectId(query.propertyId, "propertyId");
   if (query.unitId) filter.unitId = parseObjectId(query.unitId, "unitId");
@@ -89,12 +91,15 @@ export async function listStays(query) {
   return paginateQuery(Stay, filter, pagination, sort);
 }
 
-export async function getStayById(id) {
-  return toPlain(await findByIdOr404(Stay, requireObjectId(id), "Stay"));
+export async function getStayById(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  return toPlain(await findInWorkspaceOr404(Stay, requireObjectId(id), scope, "Stay"));
 }
 
-export async function updateStay(id, body) {
-  const stay = await findByIdOr404(Stay, requireObjectId(id), "Stay");
+export async function updateStay(id, body, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const stay = await findInWorkspaceOr404(Stay, requireObjectId(id), scope, "Stay");
+  assertWorkspaceUnchanged(body, stay);
   const updates = pickDefined(body, UPDATABLE);
 
   if (Object.keys(updates).length === 0) {
@@ -116,8 +121,9 @@ export async function updateStay(id, body) {
   return toPlain(stay);
 }
 
-export async function deleteStay(id) {
-  const stay = await findByIdOr404(Stay, requireObjectId(id), "Stay");
+export async function deleteStay(id, workspaceId) {
+  const scope = requireObjectId(workspaceId, "workspaceId");
+  const stay = await findInWorkspaceOr404(Stay, requireObjectId(id), scope, "Stay");
   await stay.deleteOne();
   return toPlain(stay);
 }
