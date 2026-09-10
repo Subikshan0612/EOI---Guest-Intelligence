@@ -9,7 +9,7 @@ import { IconButton } from "../ui/IconButton";
 export default function Sidebar() {
   const navigate = useNavigate();
   const { sidebarOpen, closeOverlays } = useLayout();
-  const { conversations } = useConversations();
+  const { conversations, listStatus, listError, isBackend, reload } = useConversations();
   const groups = groupConversationsByRecency(conversations);
 
   function startNewIntelligence(event) {
@@ -48,7 +48,18 @@ export default function Sidebar() {
 
       <nav className="sidebar-nav" aria-label="Conversations">
         <p className="nav-label">Conversations</p>
-        {groups.length ? (
+        {listStatus === "loading" ? (
+          <div className="sidebar-empty" role="status">
+            <p>Loading conversations…</p>
+          </div>
+        ) : listStatus === "error" ? (
+          <div className="sidebar-empty" role="status">
+            <p>{listError || "Couldn’t load conversations."}</p>
+            <button type="button" className="text-button" onClick={reload}>
+              Try again
+            </button>
+          </div>
+        ) : groups.length ? (
           groups.map((group) => (
             <div key={group.label} className="conversation-group">
               <p className="nav-label">{group.label}</p>
@@ -67,6 +78,12 @@ export default function Sidebar() {
             <p>Start a new investigation to begin.</p>
           </div>
         )}
+        {!isBackend ? (
+          <div className="sidebar-empty" role="note">
+            <p>Local mode — conversations are saved in this browser only.</p>
+            <p>Set VITE_KOI_WORKSPACE_ID to persist them to the KOI backend.</p>
+          </div>
+        ) : null}
       </nav>
 
       <div className="sidebar-footer">

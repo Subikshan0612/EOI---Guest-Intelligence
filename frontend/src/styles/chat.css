@@ -204,6 +204,14 @@
   color: var(--color-danger);
 }
 
+.chat-error-inline {
+  min-height: 0;
+  align-items: center;
+  align-self: center;
+  padding: var(--space-8) 0 0;
+  font-size: var(--font-size-sm);
+}
+
 .chat-composer-dock {
   flex-shrink: 0;
   width: 100%;

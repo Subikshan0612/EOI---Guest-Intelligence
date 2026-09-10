@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import ChatHeader from "./ChatHeader";
 import IntelligenceEmptyState from "./IntelligenceEmptyState";
 import MessageList from "./MessageList";
@@ -12,16 +13,18 @@ function prefersReducedMotion() {
 }
 
 export default function ChatWorkspace({ conversationId = null, resetKey = "default" }) {
-  const { conversation, draft, setDraft, send, retry, isProcessing, error } = useChat({
-    conversationId,
-    resetKey,
-  });
+  const { conversation, draft, setDraft, send, retry, isProcessing, error, status, retryLoad } =
+    useChat({
+      conversationId,
+      resetKey,
+    });
 
   const listRef = useRef(null);
   const bottomRef = useRef(null);
   const stickToBottomRef = useRef(true);
-  const hasMessages = conversation.messages.length > 0;
-  const showEmpty = !hasMessages && !isProcessing;
+  const messages = conversation.messages ?? [];
+  const hasMessages = messages.length > 0;
+  const showEmpty = !hasMessages && !isProcessing && status === "ready";
 
   useEffect(() => {
     stickToBottomRef.current = true;
@@ -33,7 +36,7 @@ export default function ChatWorkspace({ conversationId = null, resetKey = "defau
       behavior: prefersReducedMotion() ? "auto" : "smooth",
       block: "end",
     });
-  }, [conversation.messages, isProcessing, error]);
+  }, [messages, isProcessing, error]);
 
   function handleScroll() {
     const node = listRef.current;
@@ -48,14 +51,67 @@ export default function ChatWorkspace({ conversationId = null, resetKey = "defau
   }
 
   const composer = (
-    <PromptInput
-      value={draft}
-      onChange={setDraft}
-      onSubmit={() => handleSend(draft)}
-      sending={isProcessing}
-      autoFocus={showEmpty}
-    />
+    <>
+      <PromptInput
+        value={draft}
+        onChange={setDraft}
+        onSubmit={() => handleSend(draft)}
+        sending={isProcessing}
+        autoFocus={showEmpty}
+      />
+      {showEmpty && error ? (
+        <p className="chat-error chat-error-inline" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </>
   );
+
+  if (status === "loading") {
+    return (
+      <div className="chat-workspace is-empty">
+        <section className="investigation-state" role="status">
+          <p className="page-kicker">Investigation</p>
+          <p className="page-lead">Loading conversation…</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (status === "missing") {
+    return (
+      <div className="chat-workspace is-empty">
+        <section className="investigation-state">
+          <p className="page-kicker">Investigation</p>
+          <h1 className="page-title">Conversation not found</h1>
+          <p className="page-lead">
+            This investigation is no longer available. It may have been deleted, or the link is
+            invalid.
+          </p>
+          <Link className="text-button" to="/chat">
+            Start a new intelligence session
+          </Link>
+        </section>
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div className="chat-workspace is-empty">
+        <section className="investigation-state" role="alert">
+          <p className="page-kicker">Investigation</p>
+          <h1 className="page-title">Couldn’t load this conversation</h1>
+          <p className="page-lead">
+            KOI could not reach the backend. Check your connection and try again.
+          </p>
+          <button type="button" className="text-button" onClick={retryLoad}>
+            Try again
+          </button>
+        </section>
+      </div>
+    );
+  }
 
   if (showEmpty) {
     return (
@@ -69,7 +125,7 @@ export default function ChatWorkspace({ conversationId = null, resetKey = "defau
     <div className="chat-workspace" aria-busy={isProcessing}>
       <ChatHeader title={conversation.title} />
       <MessageList
-        messages={conversation.messages}
+        messages={messages}
         listRef={listRef}
         bottomRef={bottomRef}
         onScroll={handleScroll}

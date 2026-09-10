@@ -27,7 +27,7 @@ const pageMeta = {
 export default function Header() {
   const location = useLocation();
   const { toggleSidebar, toggleContext, contextOpen, sidebarOpen } = useLayout();
-  const { getById } = useConversations();
+  const { getById, listStatus } = useConversations();
   const chatMatch = useMatch("/chat/:conversationId");
   const conversationId = chatMatch?.params.conversationId;
   const conversation = conversationId ? getById(conversationId) : null;
@@ -35,7 +35,10 @@ export default function Header() {
   const meta = conversation
     ? { kicker: "Investigation", title: conversation.title }
     : conversationId
-      ? { kicker: "Investigation", title: "Conversation not found" }
+      ? {
+          kicker: "Investigation",
+          title: listStatus === "loading" ? "Loading…" : "Conversation not found",
+        }
       : (pageMeta[location.pathname] ?? pageMeta["/"]);
 
   return (

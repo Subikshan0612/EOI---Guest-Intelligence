@@ -62,30 +62,32 @@ export default function ConversationItem({ conversation, onNavigate }) {
     };
   }, [menuOpen, renaming, conversation.title]);
 
-  function saveRename(event) {
+  async function saveRename(event) {
     event.preventDefault();
     if (skipBlurRef.current) {
       skipBlurRef.current = false;
       return;
     }
-    if (!renameConversation(conversation.id, draftTitle)) {
-      setDraftTitle(conversation.title);
-      setRenaming(false);
-      return;
-    }
+    const nextTitle = draftTitle;
     setRenaming(false);
     setMenuOpen(false);
+    const ok = await renameConversation(conversation.id, nextTitle);
+    if (!ok) {
+      setDraftTitle(conversation.title);
+    }
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!confirmingDelete) {
       setConfirmingDelete(true);
       return;
     }
 
-    deleteConversation(conversation.id);
+    const wasActive = activeId === conversation.id;
     setMenuOpen(false);
-    if (activeId === conversation.id) {
+    setConfirmingDelete(false);
+    const ok = await deleteConversation(conversation.id);
+    if (ok && wasActive) {
       navigate("/chat", { state: { resetAt: Date.now() } });
     }
   }
