@@ -133,18 +133,38 @@ creates). Treat it as a hard boundary anyway:
 
 ## AI / RAG boundaries — read this before touching intelligence
 
-KOI's long-term plan includes an LLM, Python/FastAPI, RAG, embeddings, vector search, specialized
-agents, decision support, action orchestration, and a learning loop. **None of that is implemented,
-and none of it should be added opportunistically.**
+KOI's long-term plan includes RAG, embeddings, vector search, specialized agents, action
+orchestration, and a learning loop, plus a Python/FastAPI AI service. **None of that is implemented
+yet, and none of it should be added opportunistically.**
+
+Phase 4 (current) introduced the first real AI layer — a single Node/Express intelligence pipeline:
+`Signal → signalContextService.js (deterministic operational context) → services/ai/intelligenceService.js
+→ services/ai/llmProvider.js → validated structured Intelligence`. See
+`backend/src/services/ai/` for the implementation and `SignalIntelligencePage.jsx` for the UI.
+
+- **Provider selection is a server-side-only concern** (`LLM_PROVIDER` env var) — never
+  client-controllable, never a request parameter.
+  - `gemini` — Google Gemini API (`@google/genai`), the primary free-tier development provider.
+  - `openai` — OpenAI chat completions (`openai` SDK), retained as an optional/future alternative.
+  - `test` — deterministic in-process fixture used only by `backend/scripts/validate-intelligence.mjs`;
+    makes no network call and must never be used for real usage.
+- Every provider must return output validated by `services/ai/intelligenceSchema.js` before it
+  reaches the client — the contract (`summary/findings/risk/decision/action/outcome/confidence/provenance`)
+  is fixed and provider-agnostic; provenance (`provider`/`model`) is always attached by the backend's
+  own config, never trusted from the model's own output.
+- Generated intelligence is **currently ephemeral** — nothing is persisted to the `Intelligence`
+  collection by this pipeline. Do not add persistence here without an explicit phase asking for it.
+- Generation is **explicitly user-triggered only** — never on page load, never via `useEffect`, no
+  automatic retries or background/scheduled generation. This is a deliberate cost-control boundary.
 
 Until a phase explicitly authorizes it, do **not** introduce:
-- Calls to Anthropic/OpenAI/Gemini or any other LLM API
 - RAG, embeddings, or a vector database
 - LangGraph or other agent frameworks
-- Autonomous actions or a Python AI service
+- Autonomous actions, background AI workers, or a Python AI service (Python/FastAPI is Phase 5)
 
-The current mock intelligence system (`chatService.js` + `intelligenceContract.js`) must remain
-intact and is the only "intelligence" generator until the project explicitly transitions to real AI.
+The Phase-1 mock intelligence system (`chatService.js` + `intelligenceContract.js`) remains intact
+and is still used by the unrelated Chat feature — it is a separate, pre-existing code path from the
+Phase 4 AI pipeline above, not a fallback for it.
 
 ## Phase discipline
 
@@ -152,14 +172,17 @@ KOI is built in explicit phases; don't jump ahead.
 
 - **Phase 1** — React/Vite frontend foundation. **Done.**
 - **Phase 2** — Backend foundation, MongoDB/Mongoose, domain models, REST API, tenant isolation
-  hardening, frontend↔backend conversation integration. **Done — Phase 2E is the current state.**
-- **Next: Operational Data Foundation** (not started, do not implement early):
+  hardening, frontend↔backend conversation integration. **Done.**
+- **Phase 3** — Operational Data Foundation. **Done.**
   - 3A — Property + Unit UI/flows
   - 3B — Guest + Stay UI/flows
   - 3C — Signal ingestion
-  - 3D — Signal → Guest → Stay → Unit context assembly
-  - 3E — Operational UI
-- **Later** — real intelligence, AI/RAG, agents, actions, outcomes, learning loop.
+  - 3D — Signal → Guest → Stay → Unit deterministic context assembly
+  - 3E — Operational Intelligence UI (signal detail → context → intelligence page)
+- **Phase 4** — First real AI intelligence engine (Node/Express, no Python yet). **Done** — see the
+  AI/RAG boundaries section above for the current architecture.
+- **Phase 5 (not started)** — Python/FastAPI AI service.
+- **Later** — RAG, embeddings, vector search, agents, actions, outcomes, learning loop.
 
 Rules:
 1. Don't implement a future phase's feature because it seems useful now.

@@ -33,6 +33,7 @@ export const koiEndpoints = {
   signals: "/signals",
   signal: (id) => `/signals/${id}`,
   signalContext: (id) => `/signals/${id}/context`,
+  signalIntelligence: (id) => `/signals/${id}/intelligence`,
   prompts: "/prompts",
   intelligence: "/intelligence",
 };
@@ -267,6 +268,21 @@ export function deleteSignal(signalId, workspaceId) {
 export function getSignalContext(signalId, workspaceId) {
   return request(
     api.get(koiEndpoints.signalContext(signalId), scoped(workspaceId)),
+  ).then(itemOf);
+}
+
+/**
+ * Triggers a real AI interpretation of a Signal (Phase 4). This calls an
+ * LLM on the backend — never poll or call it automatically; only invoke it
+ * from an explicit user action. A longer timeout than the default is used
+ * since LLM generation is slower than a normal CRUD request.
+ */
+export function generateSignalIntelligence(signalId, workspaceId) {
+  return request(
+    api.post(koiEndpoints.signalIntelligence(signalId), undefined, {
+      ...scoped(workspaceId),
+      timeout: 30000,
+    }),
   ).then(itemOf);
 }
 

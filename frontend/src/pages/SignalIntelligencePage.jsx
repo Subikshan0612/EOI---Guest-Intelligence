@@ -1,26 +1,22 @@
 import { Link, useParams } from "react-router-dom";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Sparkles } from "lucide-react";
 import { useSignalDetail } from "../features/operations/useSignalDetail";
 import { useSignalContext } from "../features/operations/useSignalContext";
-import { useMockIntelligence } from "../features/intelligence/useMockIntelligence";
+import { useSignalIntelligence } from "../features/intelligence/useSignalIntelligence";
 import SignalOperationalContext from "../features/operations/SignalOperationalContext";
 import IntelligenceSignalSummary from "../features/intelligence/IntelligenceSignalSummary";
+import IntelligenceResult from "../features/intelligence/IntelligenceResult";
 import IntelligenceProvenance from "../features/intelligence/IntelligenceProvenance";
-import {
-  ActionCard,
-  DecisionCard,
-  IntelligenceCard,
-  OutcomeCard,
-  RiskIndicator,
-} from "../features/intelligence/cards";
 
 /**
- * Signal → Operational Context → Intelligence, on one page.
+ * Signal → Operational Context → AI Intelligence, on one page.
  *
  * The first two sections are operational fact, read from MongoDB via the
- * Phase 3D context endpoint. The last is the existing mock intelligence
- * generator's interpretation of that same signal — clearly separated so an
- * operator never mistakes a suggestion for a database record.
+ * Phase 3D context endpoint. The Intelligence section is a real LLM call
+ * (Phase 4) — it is never triggered automatically (no effect calls it on
+ * mount or on refresh); the operator must explicitly ask KOI to analyze the
+ * signal, and the result is always labeled as AI-generated interpretation,
+ * never as a database record.
  */
 export default function SignalIntelligencePage() {
   const { signalId } = useParams();
@@ -35,8 +31,8 @@ export default function SignalIntelligencePage() {
     intelligence,
     status: intelStatus,
     error: intelError,
-    reload: reloadIntelligence,
-  } = useMockIntelligence(signal);
+    generate: generateIntelligence,
+  } = useSignalIntelligence(signalId);
 
   const backLink = (
     <Link to={`/operations/signals/${signalId}`} className="text-button op-back-link">
@@ -93,7 +89,7 @@ export default function SignalIntelligencePage() {
           <p className="page-kicker">Operations · Signal Intelligence</p>
           <h1 className="page-title">{signal.title}</h1>
           <p className="page-lead">
-            What happened, the operational context around it, and KOI's current interpretation.
+            What happened, the operational context around it, and what KOI's AI engine makes of it.
           </p>
         </div>
       </header>
@@ -120,31 +116,51 @@ export default function SignalIntelligencePage() {
 
       <section className="intel-section">
         <p className="intel-section-label intel-section-label-intelligence">
-          Intelligence · current interpretation, not a database fact
+          Intelligence · AI-generated interpretation, not a database fact
         </p>
-        {intelStatus === "loading" ? (
-          <p className="muted">Generating intelligence…</p>
+
+        {intelStatus === "idle" ? (
+          <div className="investigation-state">
+            <p className="muted">Ready to analyze this signal.</p>
+            <button type="button" className="primary-button" onClick={generateIntelligence}>
+              <Sparkles size={16} strokeWidth={1.75} aria-hidden="true" />
+              Generate Intelligence
+            </button>
+          </div>
+        ) : intelStatus === "loading" ? (
+          <p className="muted">Analyzing operational context…</p>
+        ) : intelStatus === "unconfigured" ? (
+          <div className="investigation-state" role="alert">
+            <p className="op-form-error">{intelError}</p>
+            <p className="muted">
+              Set <code>LLM_PROVIDER</code> and its matching API key in the backend environment to
+              enable AI intelligence.
+            </p>
+          </div>
         ) : intelStatus === "error" ? (
           <div className="investigation-state" role="alert">
             <p className="op-form-error">{intelError}</p>
-            <button type="button" className="text-button" onClick={reloadIntelligence}>
+            <button type="button" className="text-button" onClick={generateIntelligence}>
               Try again
             </button>
           </div>
-        ) : intelligence ? (
-          <div className="intel-grid">
-            <IntelligenceCard intelligence={intelligence.intelligence} />
-            <RiskIndicator risk={intelligence.risk} />
-            <DecisionCard decision={intelligence.decision} />
-            <ActionCard action={intelligence.action} />
-            <OutcomeCard outcome={intelligence.outcome} />
-          </div>
-        ) : (
-          <p className="muted">No intelligence available for this signal yet.</p>
-        )}
+        ) : intelStatus === "ready" && intelligence ? (
+          <>
+            <div className="intel-grid">
+              <IntelligenceResult result={intelligence} />
+            </div>
+            <IntelligenceProvenance
+              confidence={intelligence.confidence}
+              provenance={intelligence.provenance}
+            />
+            <div className="op-form-actions">
+              <button type="button" className="text-button" onClick={generateIntelligence}>
+                Regenerate
+              </button>
+            </div>
+          </>
+        ) : null}
       </section>
-
-      <IntelligenceProvenance status={intelStatus} />
     </article>
   );
 }
