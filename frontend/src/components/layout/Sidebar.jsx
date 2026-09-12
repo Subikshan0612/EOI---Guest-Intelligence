@@ -1,4 +1,4 @@
-import { BookOpen, Building2, Plus, Settings, X } from "lucide-react";
+import { Activity, BookOpen, Building2, Plus, Settings, Users, X } from "lucide-react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { groupConversationsByRecency } from "../../features/conversations/conversationSelectors";
 import ConversationItem from "../../features/conversations/ConversationItem";
@@ -91,6 +91,14 @@ export default function Sidebar() {
         <NavLink to="/operations/properties" className="nav-link" onClick={closeOverlays}>
           <Building2 size={18} strokeWidth={1.75} aria-hidden="true" />
           Properties
+        </NavLink>
+        <NavLink to="/operations/guests" className="nav-link" onClick={closeOverlays}>
+          <Users size={18} strokeWidth={1.75} aria-hidden="true" />
+          Guests
+        </NavLink>
+        <NavLink to="/operations/signals" className="nav-link" onClick={closeOverlays}>
+          <Activity size={18} strokeWidth={1.75} aria-hidden="true" />
+          Signals
         </NavLink>
         <p className="nav-label">Intelligence</p>
         <NavLink to="/prompts" className="nav-link" onClick={closeOverlays}>

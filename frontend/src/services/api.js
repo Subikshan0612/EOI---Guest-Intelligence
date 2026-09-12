@@ -26,6 +26,13 @@ export const koiEndpoints = {
   property: (id) => `/properties/${id}`,
   units: "/units",
   unit: (id) => `/units/${id}`,
+  guests: "/guests",
+  guest: (id) => `/guests/${id}`,
+  stays: "/stays",
+  stay: (id) => `/stays/${id}`,
+  signals: "/signals",
+  signal: (id) => `/signals/${id}`,
+  signalContext: (id) => `/signals/${id}/context`,
   prompts: "/prompts",
   intelligence: "/intelligence",
 };
@@ -174,6 +181,93 @@ export function updateUnit(unitId, workspaceId, payload) {
 
 export function deleteUnit(unitId, workspaceId) {
   return request(api.delete(koiEndpoints.unit(unitId), scoped(workspaceId))).then(itemOf);
+}
+
+/* ------------------------------------------------------------------ *
+ * Guests
+ * ------------------------------------------------------------------ */
+
+export function listGuests(workspaceId, params = {}) {
+  return request(api.get(koiEndpoints.guests, scoped(workspaceId, params))).then(listOf);
+}
+
+export function getGuest(guestId, workspaceId) {
+  return request(api.get(koiEndpoints.guest(guestId), scoped(workspaceId))).then(itemOf);
+}
+
+export function createGuest(payload) {
+  return request(api.post(koiEndpoints.guests, payload)).then(itemOf);
+}
+
+export function updateGuest(guestId, workspaceId, payload) {
+  return request(api.patch(koiEndpoints.guest(guestId), payload, scoped(workspaceId))).then(
+    itemOf,
+  );
+}
+
+export function deleteGuest(guestId, workspaceId) {
+  return request(api.delete(koiEndpoints.guest(guestId), scoped(workspaceId))).then(itemOf);
+}
+
+/* ------------------------------------------------------------------ *
+ * Stays (scoped to a workspace; reference Guest, Property, and Unit)
+ * ------------------------------------------------------------------ */
+
+export function listStays(workspaceId, params = {}) {
+  return request(api.get(koiEndpoints.stays, scoped(workspaceId, params))).then(listOf);
+}
+
+export function getStay(stayId, workspaceId) {
+  return request(api.get(koiEndpoints.stay(stayId), scoped(workspaceId))).then(itemOf);
+}
+
+export function createStay(payload) {
+  return request(api.post(koiEndpoints.stays, payload)).then(itemOf);
+}
+
+export function updateStay(stayId, workspaceId, payload) {
+  return request(api.patch(koiEndpoints.stay(stayId), payload, scoped(workspaceId))).then(itemOf);
+}
+
+export function deleteStay(stayId, workspaceId) {
+  return request(api.delete(koiEndpoints.stay(stayId), scoped(workspaceId))).then(itemOf);
+}
+
+/* ------------------------------------------------------------------ *
+ * Signals (scoped to a workspace; may reference Property, Unit, Guest, Stay)
+ * ------------------------------------------------------------------ */
+
+export function listSignals(workspaceId, params = {}) {
+  return request(api.get(koiEndpoints.signals, scoped(workspaceId, params))).then(listOf);
+}
+
+export function getSignal(signalId, workspaceId) {
+  return request(api.get(koiEndpoints.signal(signalId), scoped(workspaceId))).then(itemOf);
+}
+
+export function createSignal(payload) {
+  return request(api.post(koiEndpoints.signals, payload)).then(itemOf);
+}
+
+export function updateSignal(signalId, workspaceId, payload) {
+  return request(api.patch(koiEndpoints.signal(signalId), payload, scoped(workspaceId))).then(
+    itemOf,
+  );
+}
+
+export function deleteSignal(signalId, workspaceId) {
+  return request(api.delete(koiEndpoints.signal(signalId), scoped(workspaceId))).then(itemOf);
+}
+
+/**
+ * Deterministic operational context for a Signal — its Guest/Stay/Property/
+ * Unit facts plus relevant historical Signals. Assembled fresh on every
+ * request from existing records; never a separate stored resource.
+ */
+export function getSignalContext(signalId, workspaceId) {
+  return request(
+    api.get(koiEndpoints.signalContext(signalId), scoped(workspaceId)),
+  ).then(itemOf);
 }
 
 export default api;

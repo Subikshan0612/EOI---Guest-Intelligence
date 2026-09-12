@@ -18,6 +18,14 @@ const pageMeta = {
     kicker: "Operations",
     title: "Properties",
   },
+  "/operations/guests": {
+    kicker: "Operations",
+    title: "Guests",
+  },
+  "/operations/signals": {
+    kicker: "Operations",
+    title: "Signals",
+  },
   "/prompts": {
     kicker: "Intelligence",
     title: "Prompt library",
@@ -36,6 +44,9 @@ export default function Header() {
   const conversationId = chatMatch?.params.conversationId;
   const conversation = conversationId ? getById(conversationId) : null;
   const propertyDetailMatch = useMatch("/operations/properties/:propertyId");
+  const guestDetailMatch = useMatch("/operations/guests/:guestId");
+  const signalDetailMatch = useMatch("/operations/signals/:signalId");
+  const signalIntelligenceMatch = useMatch("/operations/signals/:signalId/intelligence");
 
   const meta = conversation
     ? { kicker: "Investigation", title: conversation.title }
@@ -46,7 +57,13 @@ export default function Header() {
         }
       : propertyDetailMatch
         ? { kicker: "Operations", title: "Property" }
-        : (pageMeta[location.pathname] ?? pageMeta["/"]);
+        : guestDetailMatch
+          ? { kicker: "Operations", title: "Guest" }
+          : signalIntelligenceMatch
+            ? { kicker: "Operations", title: "Signal Intelligence" }
+            : signalDetailMatch
+              ? { kicker: "Operations", title: "Signal" }
+              : (pageMeta[location.pathname] ?? pageMeta["/"]);
 
   return (
     <header className="app-header">

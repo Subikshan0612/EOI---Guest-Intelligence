@@ -35,29 +35,62 @@ const UPDATABLE = [
   "metadata",
 ];
 
+/**
+ * Validates every optional relationship a Signal may carry, and their
+ * consistency with each other — not just that each id exists in the right
+ * workspace. A Signal is a claim like "this happened to this guest, in this
+ * stay, in this unit, at this property" — the pieces must actually agree.
+ */
 async function validateOptionalRefs(workspaceId, refs) {
   if (refs.propertyId) {
     const property = await findByIdOr404(Property, refs.propertyId, "Property");
     assertSameWorkspace(property, workspaceId, "Property");
   }
+
   if (refs.unitId) {
     const unit = await findByIdOr404(Unit, refs.unitId, "Unit");
     const unitProperty = await findByIdOr404(Property, unit.propertyId, "Property");
     assertSameWorkspace(unitProperty, workspaceId, "Unit");
+
+    if (refs.propertyId && String(unit.propertyId) !== String(refs.propertyId)) {
+      throw new AppError("Unit does not belong to the given property", 400);
+    }
   }
+
   if (refs.guestId) {
     const guest = await findByIdOr404(Guest, refs.guestId, "Guest");
     assertSameWorkspace(guest, workspaceId, "Guest");
   }
+
   if (refs.stayId) {
     const stay = await findByIdOr404(Stay, refs.stayId, "Stay");
     assertSameWorkspace(stay, workspaceId, "Stay");
+
+    if (refs.guestId && String(stay.guestId) !== String(refs.guestId)) {
+      throw new AppError("Stay does not belong to the given guest", 400);
+    }
+    if (refs.propertyId && String(stay.propertyId) !== String(refs.propertyId)) {
+      throw new AppError("Stay does not belong to the given property", 400);
+    }
+    if (refs.unitId && String(stay.unitId) !== String(refs.unitId)) {
+      throw new AppError("Stay does not belong to the given unit", 400);
+    }
+  }
+}
+
+/** occurredAt/detectedAt must be valid dates when supplied; both are optional. */
+function assertValidSignalDate(value, fieldName) {
+  if (value === undefined || value === null || value === "") return;
+  if (Number.isNaN(new Date(value).getTime())) {
+    throw new AppError(`${fieldName} is not a valid date`, 400);
   }
 }
 
 export async function createSignal(body) {
   requireFields(body, ["workspaceId", "type", "title"]);
   const workspaceId = requireObjectId(body.workspaceId, "workspaceId");
+  assertValidSignalDate(body.occurredAt, "occurredAt");
+  assertValidSignalDate(body.detectedAt, "detectedAt");
   await assertExists(Workspace, workspaceId, "Workspace");
 
   const refs = {
@@ -98,8 +131,21 @@ export async function listSignals(query) {
   if (query.guestId) filter.guestId = parseObjectId(query.guestId, "guestId");
   if (query.stayId) filter.stayId = parseObjectId(query.stayId, "stayId");
   if (query.type) filter.type = query.type;
+  if (query.source) filter.source = query.source;
   if (query.severity) filter.severity = query.severity;
   if (query.status) filter.status = query.status;
+
+  if (query.occurredFrom || query.occurredTo) {
+    filter.occurredAt = {};
+    if (query.occurredFrom) {
+      assertValidSignalDate(query.occurredFrom, "occurredFrom");
+      filter.occurredAt.$gte = new Date(query.occurredFrom);
+    }
+    if (query.occurredTo) {
+      assertValidSignalDate(query.occurredTo, "occurredTo");
+      filter.occurredAt.$lte = new Date(query.occurredTo);
+    }
+  }
 
   return paginateQuery(Signal, filter, pagination, sort);
 }
@@ -124,6 +170,9 @@ export async function updateSignal(id, body, workspaceId) {
       updates[key] = parseObjectId(updates[key], key);
     }
   }
+
+  assertValidSignalDate(updates.occurredAt, "occurredAt");
+  assertValidSignalDate(updates.detectedAt, "detectedAt");
 
   await validateOptionalRefs(signal.workspaceId, {
     propertyId: updates.propertyId ?? signal.propertyId,

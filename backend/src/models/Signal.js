@@ -100,6 +100,7 @@ const signalSchema = new mongoose.Schema(
 signalSchema.index({ workspaceId: 1, createdAt: -1 });
 signalSchema.index({ workspaceId: 1, severity: 1 });
 signalSchema.index({ workspaceId: 1, status: 1 });
+signalSchema.index({ workspaceId: 1, occurredAt: -1 });
 
 export const Signal = mongoose.model("Signal", signalSchema);
 export { SIGNAL_TYPES, SIGNAL_SOURCES, SIGNAL_SEVERITIES, SIGNAL_STATUSES };

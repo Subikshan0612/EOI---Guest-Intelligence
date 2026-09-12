@@ -47,9 +47,33 @@
   color: var(--color-warning);
 }
 
+.status-chip[data-tone="checked_in"] {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
 .status-chip[data-tone="inactive"],
 .status-chip[data-tone="archived"],
-.status-chip[data-tone="out_of_service"] {
+.status-chip[data-tone="out_of_service"],
+.status-chip[data-tone="cancelled"],
+.status-chip[data-tone="no_show"] {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+/* Signal severity/status tones */
+.status-chip[data-tone="low"],
+.status-chip[data-tone="resolved"] {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.status-chip[data-tone="high"] {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.status-chip[data-tone="critical"] {
   background: var(--color-danger-soft);
   color: var(--color-danger);
 }
@@ -112,6 +136,16 @@
 .op-field-input:focus {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+.op-field-textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.op-form-section-label {
+  margin-top: var(--space-4);
 }
 
 .op-form-actions {
@@ -223,6 +257,68 @@
   gap: var(--space-4);
 }
 
+/* Stay history within a guest */
+.op-stay-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.op-stay-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding: var(--space-12) var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+  flex-wrap: wrap;
+}
+
+.op-stay-row.is-editing {
+  align-items: stretch;
+  background: var(--color-surface);
+}
+
+.op-stay-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  flex-wrap: wrap;
+}
+
+.op-stay-place {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 8rem;
+}
+
+.op-stay-property {
+  font-weight: var(--font-weight-semibold);
+}
+
+a.op-stay-property {
+  color: var(--color-accent);
+}
+
+a.op-stay-property:hover {
+  color: var(--color-accent-hover);
+}
+
+.op-stay-dates {
+  font-size: var(--font-size-sm);
+}
+
+.op-stay-guest-name {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
 .icon-button.is-danger,
 .text-button.is-danger {
   color: var(--color-danger);
@@ -252,7 +348,143 @@
     margin-left: 0;
   }
 
-  .op-unit-row {
+  .op-unit-row,
+  .op-stay-row {
     align-items: flex-start;
+  }
+
+  .op-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Signal filters + list */
+.op-filter-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+
+.op-list-chips {
+  display: flex;
+  gap: var(--space-8);
+  flex-shrink: 0;
+}
+
+/* Operational Context + Recent History (Phase 3D) — deterministic facts
+ * assembled from existing records, not AI interpretation. Reuses
+ * .context-dl/.card-label/.status-chip rather than introducing new visual
+ * language. */
+.op-context-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-16);
+}
+
+.op-context-card {
+  padding: var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+}
+
+.op-context-unavailable {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.op-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.op-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+  flex-wrap: wrap;
+}
+
+.op-history-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.op-history-meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Signal Intelligence workspace (Phase 3E) — Signal → Context → Intelligence.
+ * Built entirely on existing tokens/primitives (.koi-card, .card-label,
+ * .op-units-section, .context-dl, .status-chip); the only new classes are
+ * the flow indicator and the fact/intelligence section labels. */
+.intel-flow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  color: var(--color-text-secondary);
+  flex-wrap: wrap;
+}
+
+.intel-flow-arrow {
+  color: var(--color-text-muted);
+}
+
+.intel-section-label {
+  margin: 0 0 var(--space-12);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.intel-section-label-intelligence {
+  color: var(--color-accent);
+}
+
+.intel-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding-top: var(--space-24);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.intel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-16);
+  align-items: start;
+}
+
+.intel-signal-summary p {
+  margin-top: var(--space-12);
+}
+
+.intel-provenance {
+  background: var(--color-surface);
+}
+
+@media (max-width: 768px) {
+  .intel-flow {
+    font-size: var(--font-size-md);
   }
 }
