@@ -5,6 +5,7 @@ import "./styles/tokens.css";
 import "./styles/global.css";
 import "./styles/layout.css";
 import "./styles/chat.css";
+import "./styles/operations.css";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

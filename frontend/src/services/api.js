@@ -22,6 +22,10 @@ export const koiEndpoints = {
   conversations: "/conversations",
   conversation: (id) => `/conversations/${id}`,
   messages: (conversationId) => `/conversations/${conversationId}/messages`,
+  properties: "/properties",
+  property: (id) => `/properties/${id}`,
+  units: "/units",
+  unit: (id) => `/units/${id}`,
   prompts: "/prompts",
   intelligence: "/intelligence",
 };
@@ -118,6 +122,58 @@ export function createMessage(conversationId, workspaceId, payload) {
   return request(
     api.post(koiEndpoints.messages(conversationId), payload, scoped(workspaceId)),
   ).then(itemOf);
+}
+
+/* ------------------------------------------------------------------ *
+ * Properties
+ * ------------------------------------------------------------------ */
+
+export function listProperties(workspaceId, params = {}) {
+  return request(api.get(koiEndpoints.properties, scoped(workspaceId, params))).then(listOf);
+}
+
+export function getProperty(propertyId, workspaceId) {
+  return request(api.get(koiEndpoints.property(propertyId), scoped(workspaceId))).then(itemOf);
+}
+
+export function createProperty(payload) {
+  return request(api.post(koiEndpoints.properties, payload)).then(itemOf);
+}
+
+export function updateProperty(propertyId, workspaceId, payload) {
+  return request(
+    api.patch(koiEndpoints.property(propertyId), payload, scoped(workspaceId)),
+  ).then(itemOf);
+}
+
+export function deleteProperty(propertyId, workspaceId) {
+  return request(
+    api.delete(koiEndpoints.property(propertyId), scoped(workspaceId)),
+  ).then(itemOf);
+}
+
+/* ------------------------------------------------------------------ *
+ * Units (scoped to a workspace through their Property)
+ * ------------------------------------------------------------------ */
+
+export function listUnits(workspaceId, params = {}) {
+  return request(api.get(koiEndpoints.units, scoped(workspaceId, params))).then(listOf);
+}
+
+export function getUnit(unitId, workspaceId) {
+  return request(api.get(koiEndpoints.unit(unitId), scoped(workspaceId))).then(itemOf);
+}
+
+export function createUnit(payload) {
+  return request(api.post(koiEndpoints.units, payload)).then(itemOf);
+}
+
+export function updateUnit(unitId, workspaceId, payload) {
+  return request(api.patch(koiEndpoints.unit(unitId), payload, scoped(workspaceId))).then(itemOf);
+}
+
+export function deleteUnit(unitId, workspaceId) {
+  return request(api.delete(koiEndpoints.unit(unitId), scoped(workspaceId))).then(itemOf);
 }
 
 export default api;

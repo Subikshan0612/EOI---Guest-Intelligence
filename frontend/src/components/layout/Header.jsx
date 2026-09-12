@@ -14,6 +14,10 @@ const pageMeta = {
     kicker: "Workspace",
     title: "New investigation",
   },
+  "/operations/properties": {
+    kicker: "Operations",
+    title: "Properties",
+  },
   "/prompts": {
     kicker: "Intelligence",
     title: "Prompt library",
@@ -31,6 +35,7 @@ export default function Header() {
   const chatMatch = useMatch("/chat/:conversationId");
   const conversationId = chatMatch?.params.conversationId;
   const conversation = conversationId ? getById(conversationId) : null;
+  const propertyDetailMatch = useMatch("/operations/properties/:propertyId");
 
   const meta = conversation
     ? { kicker: "Investigation", title: conversation.title }
@@ -39,7 +44,9 @@ export default function Header() {
           kicker: "Investigation",
           title: listStatus === "loading" ? "Loading…" : "Conversation not found",
         }
-      : (pageMeta[location.pathname] ?? pageMeta["/"]);
+      : propertyDetailMatch
+        ? { kicker: "Operations", title: "Property" }
+        : (pageMeta[location.pathname] ?? pageMeta["/"]);
 
   return (
     <header className="app-header">

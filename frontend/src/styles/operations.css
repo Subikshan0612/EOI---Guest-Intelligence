@@ -1,0 +1,258 @@
+/* Operations area (Properties + Units) — Phase 3A.
+ * Built entirely on the existing design tokens and shares primitives with
+ * the rest of KOI (.page, .koi-card, .primary-button, .text-button,
+ * .icon-button, .muted, .investigation-state, .card-label). Only the
+ * form/list/chip patterns specific to operational records live here. */
+
+.op-page {
+  gap: var(--space-28);
+}
+
+.op-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-16);
+  flex-wrap: wrap;
+}
+
+.op-back-link {
+  align-self: flex-start;
+}
+
+/* Status chip — shared visual language with .risk-chip/.severity-chip,
+ * mapped to Property/Unit status values instead of risk levels. */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: capitalize;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.status-chip[data-tone="active"],
+.status-chip[data-tone="available"] {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.status-chip[data-tone="maintenance"] {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.status-chip[data-tone="inactive"],
+.status-chip[data-tone="archived"],
+.status-chip[data-tone="out_of_service"] {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+/* Forms (Property + Unit create/edit) */
+.op-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+.op-form-row {
+  display: flex;
+  gap: var(--space-16);
+  flex-wrap: wrap;
+}
+
+.op-form-inline {
+  flex-direction: row;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+.op-form-inline .op-form-actions {
+  margin-left: auto;
+}
+
+.op-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1;
+  min-width: 10rem;
+}
+
+.op-field-narrow {
+  flex: 0 0 auto;
+  width: 12rem;
+  max-width: 100%;
+}
+
+.op-field-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.op-field-input {
+  min-height: 2.5rem;
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+  color: var(--color-text);
+}
+
+.op-field-input:focus {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.op-form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.op-form-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+/* Property list */
+.op-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.op-list-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+  color: inherit;
+  transition: border-color var(--ease), background var(--ease);
+}
+
+.op-list-link:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+}
+
+.op-list-link svg {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.op-list-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.op-list-title {
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+/* Units within a property */
+.op-units-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding-top: var(--space-24);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.op-unit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.op-unit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+  flex-wrap: wrap;
+}
+
+.op-unit-row.is-editing {
+  align-items: stretch;
+  background: var(--color-surface);
+}
+
+.op-unit-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+
+.op-unit-number {
+  font-weight: var(--font-weight-semibold);
+  min-width: 2.5rem;
+}
+
+.op-unit-actions {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.icon-button.is-danger,
+.text-button.is-danger {
+  color: var(--color-danger);
+}
+
+.icon-button.is-danger:hover {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+@media (max-width: 768px) {
+  .op-page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .op-field-narrow {
+    width: 100%;
+  }
+
+  .op-form-inline {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .op-form-inline .op-form-actions {
+    margin-left: 0;
+  }
+
+  .op-unit-row {
+    align-items: flex-start;
+  }
+}
