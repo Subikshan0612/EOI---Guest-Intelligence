@@ -1,11 +1,24 @@
-import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import { AppError } from "../../utils/AppError.js";
 import { INTELLIGENCE_JSON_SCHEMA } from "./intelligenceSchema.js";
 
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
-const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
 const REQUEST_TIMEOUT_MS = 20000;
+
+/**
+ * Direct-from-Node provider execution. As of Phase 5 Step 5, this module
+ * owns exactly two providers:
+ *   - "openai" — real OpenAI chat completions, called directly from Node.
+ *     Retained as an optional/future alternative; never touches ai-service.
+ *   - "test"   — deterministic in-process fixture for the Node-level Phase 4
+ *     test suite. Never makes a network call.
+ *
+ * "gemini" is deliberately NOT a branch here. Real Gemini execution now
+ * lives entirely in ai-service/ (app/services/gemini_client.py) — Node's
+ * LLM_PROVIDER=gemini is intercepted in intelligenceService.js and delegated
+ * to Python before this module is ever reached, so this file has no need to
+ * know about Gemini, a Gemini SDK, or a Gemini API key at all.
+ */
 
 /**
  * Provider selection is read from process.env on every call rather than
@@ -19,14 +32,12 @@ function readConfig() {
     provider: (process.env.LLM_PROVIDER || "").trim().toLowerCase(),
     model: (process.env.LLM_MODEL || "").trim(),
     openaiApiKey: process.env.OPENAI_API_KEY,
-    geminiApiKey: process.env.GEMINI_API_KEY,
   };
 }
 
 export function isAiConfigured() {
-  const { provider, openaiApiKey, geminiApiKey } = readConfig();
+  const { provider, openaiApiKey } = readConfig();
   if (provider === "test") return true;
-  if (provider === "gemini") return Boolean(geminiApiKey);
   if (provider === "openai") return Boolean(openaiApiKey);
   return false;
 }
@@ -35,7 +46,6 @@ export function isAiConfigured() {
 export function getActiveProviderInfo() {
   const { provider, model } = readConfig();
   if (provider === "test") return { provider: "test", model: model || "test-model" };
-  if (provider === "gemini") return { provider: "gemini", model: model || DEFAULT_GEMINI_MODEL };
   return { provider: provider || "none", model: model || DEFAULT_OPENAI_MODEL };
 }
 
@@ -50,17 +60,10 @@ export function getActiveProviderInfo() {
  * LLM_PROVIDER=test, so it can never be used to influence a real AI call.
  */
 export async function requestStructuredIntelligence({ systemPrompt, userPrompt, testScenario }) {
-  const { provider, model, openaiApiKey, geminiApiKey } = readConfig();
+  const { provider, model, openaiApiKey } = readConfig();
 
   if (provider === "test") {
     return callTestProvider(testScenario);
-  }
-
-  if (provider === "gemini") {
-    if (!geminiApiKey) {
-      throw new AppError("AI intelligence service is not configured.", 503);
-    }
-    return callGemini({ systemPrompt, userPrompt, model: model || DEFAULT_GEMINI_MODEL, apiKey: geminiApiKey });
   }
 
   if (provider === "openai") {
@@ -113,76 +116,6 @@ async function callOpenAi({ systemPrompt, userPrompt, model, apiKey }) {
 }
 
 /**
- * Converts the shared JSON-Schema contract (intelligenceSchema.js) into
- * Gemini's schema dialect (uppercase type names, `format: "enum"` for
- * restricted strings, no `additionalProperties`). Deriving this from the
- * same source object — rather than hand-writing a second schema — keeps the
- * two providers from ever silently drifting apart on what "valid" means.
- */
-function toGeminiSchema(schema) {
-  if (schema.type === "object") {
-    return {
-      type: "OBJECT",
-      properties: Object.fromEntries(
-        Object.entries(schema.properties).map(([key, value]) => [key, toGeminiSchema(value)]),
-      ),
-      required: schema.required,
-    };
-  }
-  if (schema.type === "array") {
-    return { type: "ARRAY", items: toGeminiSchema(schema.items) };
-  }
-  if (schema.type === "string") {
-    return schema.enum ? { type: "STRING", format: "enum", enum: schema.enum } : { type: "STRING" };
-  }
-  if (schema.type === "number") {
-    return { type: "NUMBER" };
-  }
-  throw new Error(`Unsupported schema type for Gemini conversion: ${schema.type}`);
-}
-
-const GEMINI_INTELLIGENCE_SCHEMA = toGeminiSchema(INTELLIGENCE_JSON_SCHEMA);
-
-async function callGemini({ systemPrompt, userPrompt, model, apiKey }) {
-  // The SDK retries up to 5 times by default on 408/429/5xx — explicitly
-  // disabled here to match the OpenAI client's `maxRetries: 0` and avoid
-  // silently multiplying free-tier API usage on a transient error.
-  const client = new GoogleGenAI({
-    apiKey,
-    httpOptions: { timeout: REQUEST_TIMEOUT_MS, retryOptions: { attempts: 1 } },
-  });
-
-  let response;
-  try {
-    response = await client.models.generateContent({
-      model,
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-        responseSchema: GEMINI_INTELLIGENCE_SCHEMA,
-      },
-    });
-  } catch (error) {
-    throw mapGeminiError(error);
-  }
-
-  const text = response?.text;
-  if (!text) {
-    throw new AppError("AI intelligence service returned an empty response.", 502);
-  }
-
-  let raw;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    throw new AppError("AI intelligence service returned a malformed response.", 502);
-  }
-
-  return { raw, model };
-}
-
-/**
  * Maps an OpenAI SDK error to a safe application-level AppError. Never
  * forwards the raw error message or object to the caller — it may contain
  * request headers, endpoint URLs, or other provider internals — and never
@@ -200,27 +133,6 @@ function mapOpenAiError(error) {
     return new AppError("AI intelligence service is currently rate-limited. Try again shortly.", 503);
   }
   if (error?.name === "APIConnectionTimeoutError" || error?.code === "ETIMEDOUT") {
-    return new AppError("AI intelligence service timed out. Try again.", 504);
-  }
-  return new AppError("AI intelligence service is temporarily unavailable.", 502);
-}
-
-/**
- * Maps a Gemini SDK error to a safe application-level AppError. Same
- * no-leakage guarantee as mapOpenAiError: only `error.name`/`status` are
- * ever logged, never the full error object or its message.
- */
-function mapGeminiError(error) {
-  const status = error?.status;
-  console.error("[KOI API] LLM provider error (gemini):", error?.name || "Error", status ?? "no-status");
-
-  if (status === 400 || status === 401 || status === 403 || status === 404) {
-    return new AppError("AI intelligence service is not configured correctly.", 503);
-  }
-  if (status === 429) {
-    return new AppError("AI intelligence service is currently rate-limited. Try again shortly.", 503);
-  }
-  if (error?.name === "AbortError" || /timeout/i.test(error?.message || "")) {
     return new AppError("AI intelligence service timed out. Try again.", 504);
   }
   return new AppError("AI intelligence service is temporarily unavailable.", 502);

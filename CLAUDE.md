@@ -139,11 +139,14 @@ should be added opportunistically.**
 
 Phase 4 introduced the first real AI layer entirely inside Node/Express:
 `Signal → signalContextService.js (deterministic operational context) → services/ai/intelligenceService.js
-→ services/ai/llmProvider.js → validated structured Intelligence`. That code
-(`backend/src/services/ai/llmProvider.js`'s `gemini`/`openai`/`test` branches) is **kept intact as a
-rollback/reference path** — do not delete it opportunistically. It is no longer reachable via Node's
-`gemini` value (see Step 4 correction below) but remains fully wired for `openai`/`test` and as a
-revert target.
+→ services/ai/llmProvider.js → validated structured Intelligence`. As of Phase 5 Step 5,
+`backend/src/services/ai/llmProvider.js` owns only its `openai` and `test` branches — its Gemini
+branch (`callGemini`, `mapGeminiError`, the Gemini→JSON-Schema conversion, the `@google/genai`
+dependency) was removed as genuinely dead code once `LLM_PROVIDER=gemini` started routing to Python
+in Step 4's correction; nothing in the codebase called it any more. `openai` (direct Node→OpenAI,
+retained as an optional/future alternative) and `test` (the Node-level deterministic fixture Phase 4's
+test suite depends on) are both still live and still fully covered by tests — don't delete this file
+or either remaining branch opportunistically.
 
 Phase 5 introduced `ai-service/`, a sibling Python/FastAPI service that owns real model invocation:
 `React → Node assembleSignalContext() (tenant isolation + deterministic context, unconditional) →
@@ -156,10 +159,11 @@ tenant/workspace knowledge, no public frontend-facing API — it is only ever ca
   `ai-service`'s own `LLM_PROVIDER` — never client-controllable, never a request parameter. These are
   two independent settings on two different processes — Node's value picks a *route*, `ai-service`'s
   value (only consulted once Node has routed there) picks what that route actually executes.
-  - Node `LLM_PROVIDER=gemini` — **the real/default production path as of Step 4's correction.** Node
-    delegates to `ai-service` (`aiServiceClient.js`), which then calls Gemini itself if its own
-    `LLM_PROVIDER=gemini`. This is no longer a direct Node→Gemini call — `llmProvider.js`'s Gemini
-    branch sits unused behind it as rollback code.
+  - Node `LLM_PROVIDER=gemini` — **the real/default production path.** Node delegates to `ai-service`
+    (`aiServiceClient.js`), which then calls Gemini itself if its own `LLM_PROVIDER=gemini`. This is
+    not a direct Node→Gemini call, and (as of Phase 5 Step 5) Node has no Gemini client at all —
+    `llmProvider.js`'s Gemini branch and the `@google/genai` dependency were removed once this
+    became genuinely dead code.
   - Node `LLM_PROVIDER=openai` — OpenAI chat completions, called directly from Node via
     `llmProvider.js` (unaffected by the above — this path never touches `ai-service`). Retained as an
     optional/future alternative.
@@ -220,6 +224,11 @@ KOI is built in explicit phases; don't jump ahead.
     default (`test-python` kept as a secondary explicit trigger for the same path); `llmProvider.js`
     remains untouched as rollback/reference code. `React → Node → Python → Gemini` is now the real,
     verified production path (see AI/RAG boundaries section above for the full routing table).
+  - Step 5 — migration cleanup: audited every reference to `llmProvider.js`/`LLM_PROVIDER` across the
+    repo, confirmed its Gemini branch was genuinely unreachable dead code (routing already went
+    through Python), removed that branch plus the now-unused `@google/genai` dependency, and updated
+    stale docs/comments that still described Gemini as living in or rolling back to Node. `openai`
+    and `test` branches (and the file itself) were kept — both remain live, tested code paths. **Done.**
   - Remaining — further production hardening/observability of the Python path as needed; no further
     routing migration is pending.
 - **Later** — RAG, embeddings, vector search, agents, actions, outcomes, learning loop.

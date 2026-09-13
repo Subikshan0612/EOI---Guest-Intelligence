@@ -6,12 +6,12 @@ const REQUEST_TIMEOUT_MS = 20000;
  * Thin HTTP client to the Python AI service (Phase 5). Its only job is to
  * POST an already-assembled Signal context and translate the service's
  * response — or its failure — into the same safe application errors the
- * Gemini/OpenAI paths already produce.
+ * OpenAI path in llmProvider.js already produces.
  *
  * This module never assembles operational context, never touches MongoDB,
  * never resolves tenancy, and never contains any provider-specific (Gemini)
- * logic — that still lives entirely in llmProvider.js, untouched by this
- * file, and will eventually live in the Python service itself.
+ * logic — Gemini execution lives entirely in the Python service
+ * (app/services/gemini_client.py); Node has no Gemini client of its own.
  */
 export async function requestIntelligenceFromAiService(context) {
   const baseUrl = (process.env.AI_SERVICE_URL || "").trim();
@@ -63,7 +63,7 @@ export async function requestIntelligenceFromAiService(context) {
  * Maps the AI service's own error contract ({error:{code,message}}) to a
  * safe Node-facing AppError. Never forwards the service's raw message
  * verbatim, and never logs anything beyond the code/status — the same
- * no-leakage discipline as mapGeminiError/mapOpenAiError in llmProvider.js.
+ * no-leakage discipline as mapOpenAiError in llmProvider.js.
  */
 function mapAiServiceError(body, status) {
   const code = body?.error?.code;

@@ -45,10 +45,11 @@ Node assembleSignalContext() -> aiServiceClient.js -> POST /v1/intelligence/sign
 ```
 
 This service still does not: talk to MongoDB, know about tenants/workspaces, or persist
-anything. Node's own pre-Step-4 Gemini/OpenAI implementation
-(`backend/src/services/ai/llmProvider.js`) is untouched and remains available as a
-rollback/reference path — it is not used by the `test-python` delegation path described
-above, and removing it is explicitly deferred to a later cleanup step.
+anything. Node's own pre-Step-4 direct Gemini implementation was removed in Phase 5 Step 5's
+cleanup once it became genuinely dead code (nothing routed `LLM_PROVIDER=gemini` to it any
+more). `backend/src/services/ai/llmProvider.js` still exists and is still used, but only for
+its `openai` (direct Node→OpenAI, unaffected by any of this) and `test` (Node-level
+deterministic fixture) branches — it has no Gemini code or Gemini dependency left.
 
 ## Responsibility split (Node vs. this service)
 
@@ -58,7 +59,7 @@ above, and removing it is explicitly deferred to a later cleanup step.
 | Tenant/workspace isolation | ✅ owns | ❌ never |
 | Context assembly | ✅ owns | ❌ never (receives it) |
 | Public API for the frontend | ✅ owns | ❌ never |
-| Gemini invocation | (still, via the legacy `llmProvider.js` path) | ✅ (via `LLM_PROVIDER=test-python` on Node + `LLM_PROVIDER=gemini` here) |
+| Gemini invocation | ❌ never (no Gemini client in Node as of Step 5) | ✅ (via `LLM_PROVIDER=gemini`/`test-python` on Node + `LLM_PROVIDER=gemini` here) |
 | AI-specific processing / prompt construction | — | ✅ owns |
 | Final application-level response validation | ✅ owns (always re-validates) | ✅ also validates before returning |
 | Provenance | relays what this service reports | ✅ attaches its own (provider/model), never trusts the model's own output |

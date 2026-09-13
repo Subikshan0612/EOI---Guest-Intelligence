@@ -10,13 +10,13 @@ import { validateIntelligenceResult } from "./intelligenceSchema.js";
  * Node provider values that delegate generation to the Python AI service
  * (ai-service/) rather than calling a provider directly from Node.
  *
- * - "gemini"      — Phase 5 Step 4 correction: this is now the real,
- *                    production/default route to Gemini. It no longer calls
- *                    llmProvider.js's direct Gemini branch — Node delegates
- *                    to Python, and Python's OWN LLM_PROVIDER decides
- *                    whether that call is real (its `gemini` value, via
- *                    gemini_client.py) or a deterministic stub (its `test`
- *                    value, the safe default).
+ * - "gemini"      — the real, production/default route to Gemini. Node
+ *                    delegates to Python, and Python's OWN LLM_PROVIDER
+ *                    decides whether that call is real (its `gemini` value,
+ *                    via gemini_client.py) or a deterministic stub (its
+ *                    `test` value, the safe default). As of Phase 5 Step 5,
+ *                    llmProvider.js no longer contains a Gemini branch at
+ *                    all — Gemini execution lives exclusively in Python.
  * - "test-python" — kept as an explicit, secondary way to reach the same
  *                    Python delegation path (useful for deterministic
  *                    Node→Python integration testing without relying on
@@ -37,8 +37,9 @@ const PYTHON_ROUTED_PROVIDERS = new Set(["gemini", "test-python"]);
  * from the current operational facts. Ephemeral by design for this phase.
  *
  * `LLM_PROVIDER=openai` and `LLM_PROVIDER=test` still flow through
- * llmProvider.js exactly as before — that file is untouched. Only `gemini`
- * (as of this correction) and `test-python` route to Python; Node relays
+ * llmProvider.js, which as of Phase 5 Step 5 owns only those two providers
+ * (its Gemini branch was removed as dead code once `gemini` started routing
+ * to Python). `gemini` and `test-python` route to Python; Node relays
  * whatever provenance Python honestly reports rather than assuming either
  * one, since Python — not Node — knows which of its own code paths it ran.
  */

@@ -10,8 +10,9 @@
  *    `__testScenario` query param (honored ONLY when LLM_PROVIDER=test) lets
  *    this script exercise malformed/invalid/failure paths deterministically.
  *
- * Every provider-configuration edge case — "not configured", "gemini/openai
- * without a key", "unsupported provider value" — is exercised by briefly
+ * Every provider-configuration edge case — "not configured" (gemini without
+ * AI_SERVICE_URL, openai without a key), "unsupported provider value" — is
+ * exercised by briefly
  * spawning its own throwaway backend process with `withEphemeralServer()`
  * below, with the relevant provider/key env vars explicitly overridden
  * (including explicitly cleared, e.g. `LLM_PROVIDER: ""`). This script
