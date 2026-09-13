@@ -344,16 +344,25 @@ async function main() {
   );
 
   // === Provider-selection edge cases: each spawns its own throwaway server ===
-  await withEphemeralServer(5058, { LLM_PROVIDER: "gemini", GEMINI_API_KEY: "" }, async (base) => {
-    await expectStatus(
-      base,
-      "4G.1: LLM_PROVIDER=gemini without a key -> not configured",
-      "POST",
-      `/signals/${signalId}/intelligence?workspaceId=${wsA}`,
-      null,
-      503,
-    );
-  });
+  // Phase 5 Step 4 correction: LLM_PROVIDER=gemini now delegates to the
+  // Python AI service (aiServiceClient.js) rather than calling Gemini
+  // directly from Node — so "not configured" here means "no AI_SERVICE_URL
+  // reachable," not "no GEMINI_API_KEY" (Node no longer reads that key for
+  // this value at all). GEMINI_API_KEY is still cleared defensively.
+  await withEphemeralServer(
+    5058,
+    { LLM_PROVIDER: "gemini", GEMINI_API_KEY: "", AI_SERVICE_URL: "" },
+    async (base) => {
+      await expectStatus(
+        base,
+        "4G.1: LLM_PROVIDER=gemini without AI_SERVICE_URL -> not configured",
+        "POST",
+        `/signals/${signalId}/intelligence?workspaceId=${wsA}`,
+        null,
+        503,
+      );
+    },
+  );
 
   await withEphemeralServer(5059, { LLM_PROVIDER: "openai", OPENAI_API_KEY: "" }, async (base) => {
     await expectStatus(

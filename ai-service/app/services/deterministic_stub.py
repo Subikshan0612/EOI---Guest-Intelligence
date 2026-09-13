@@ -1,10 +1,13 @@
 """
-Deterministic stub intelligence generator (Phase 5 Step 3).
+Deterministic stub intelligence generator.
 
-This does NOT call Gemini, or any other model — it derives a fixed,
-reproducible response purely from the fields already present in the
-supplied context. It exists to prove the Node <-> Python contract (request
-shape, response shape, error shape) before any real model call is wired in.
+Used when this service's own LLM_PROVIDER is "test" (see
+app/routers/intelligence.py and app/config.py). This does NOT call Gemini,
+or any other model — it derives a fixed, reproducible response purely from
+the fields already present in the supplied context. It exists to prove the
+Node <-> Python contract (request shape, response shape, error shape)
+independently of any real model call, and remains available alongside the
+real Gemini path added in Phase 5 Step 4 (app/services/gemini_client.py).
 
 It must never invent a guest/property/stay fact that isn't already in the
 context: every reference to context data below reads a field that was
@@ -82,5 +85,5 @@ def generate_deterministic_intelligence(context: SignalContext) -> IntelligenceR
         ),
         outcome=Outcome(expected=f"{STUB_MARKER} No real outcome — this is a stub response."),
         confidence=0.5,
-        provenance=Provenance(provider="test-python", model="deterministic-stub"),
+        provenance=Provenance(provider="test", model="deterministic-stub"),
     )

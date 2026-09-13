@@ -8,12 +8,15 @@ This is the foundation of KOI's Phase 5 AI service boundary — a small, single-
 Python service that sits between the existing Node/Express backend and an LLM provider
 (Gemini). It is a **sibling** of `backend/` and `frontend/`, not a replacement for either.
 
-## What this service owns (eventually)
+## What this service owns
 
-- AI orchestration (prompt construction, model invocation)
-- AI-specific processing of an already-assembled operational context
-- Future retrieval/RAG orchestration, if and when that phase is authorized
-- Future agent orchestration, if and when that phase is authorized
+- AI orchestration (prompt construction, model invocation) — real, as of Phase 5 Step 4
+  (`app/services/gemini_client.py`), alongside the deterministic stub from Step 3
+  (`app/services/deterministic_stub.py`). Which one runs is decided entirely by this
+  service's own `LLM_PROVIDER` env var — never by the caller.
+- AI-specific processing of an already-assembled operational context.
+- Future retrieval/RAG orchestration, if and when that phase is authorized.
+- Future agent orchestration, if and when that phase is authorized.
 
 ## What this service does NOT own
 
@@ -28,18 +31,24 @@ Python service that sits between the existing Node/Express backend and an LLM pr
   to Node (`POST /api/signals/:id/intelligence`); it has no knowledge this service exists.
 - Authentication/authorization — handled upstream in Node when it is eventually added.
 
-## Current Phase 5 scope (Step 2)
+## Current Phase 5 scope (Step 4)
 
-**This step builds the service foundation only.** It does not yet:
-- Call Gemini or any other LLM provider
-- Define the real intelligence request/response contract
-- Talk to the Node backend
-- Persist anything
+**Real Gemini execution now lives here**, reached only via Node's
+`POST /api/signals/:id/intelligence`:
 
-The only endpoint implemented so far is a health check. Configuration for
-`LLM_PROVIDER`/`LLM_MODEL`/`GEMINI_API_KEY` is wired up so later steps don't need to
-redo environment plumbing, but nothing reads `GEMINI_API_KEY` yet, and the service
-starts and runs correctly with it left blank.
+```
+Node assembleSignalContext() -> aiServiceClient.js -> POST /v1/intelligence/signal
+  -> this service's own LLM_PROVIDER decides:
+       "test"   -> deterministic stub (no network call) — the default
+       "gemini" -> real call via the official google-genai SDK
+  -> validated IntelligenceResponse -> Node re-validates -> React
+```
+
+This service still does not: talk to MongoDB, know about tenants/workspaces, or persist
+anything. Node's own pre-Step-4 Gemini/OpenAI implementation
+(`backend/src/services/ai/llmProvider.js`) is untouched and remains available as a
+rollback/reference path — it is not used by the `test-python` delegation path described
+above, and removing it is explicitly deferred to a later cleanup step.
 
 ## Responsibility split (Node vs. this service)
 
@@ -49,8 +58,10 @@ starts and runs correctly with it left blank.
 | Tenant/workspace isolation | ✅ owns | ❌ never |
 | Context assembly | ✅ owns | ❌ never (receives it) |
 | Public API for the frontend | ✅ owns | ❌ never |
-| AI orchestration / model invocation | (currently, Phase 4) | ✅ eventual owner |
-| AI-specific processing | — | ✅ eventual owner |
+| Gemini invocation | (still, via the legacy `llmProvider.js` path) | ✅ (via `LLM_PROVIDER=test-python` on Node + `LLM_PROVIDER=gemini` here) |
+| AI-specific processing / prompt construction | — | ✅ owns |
+| Final application-level response validation | ✅ owns (always re-validates) | ✅ also validates before returning |
+| Provenance | relays what this service reports | ✅ attaches its own (provider/model), never trusts the model's own output |
 
 ## Local setup
 
@@ -95,8 +106,9 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Leave `GEMINI_API_KEY` blank — it is not used yet and the service does not require it
-to start.
+Leave `GEMINI_API_KEY` blank (and/or `LLM_PROVIDER` at its default of `test`) to run
+with the deterministic stub only — the service never requires a real key to start, and
+never attempts a real call unless `LLM_PROVIDER=gemini` is explicitly set here.
 
 ### 5. Start the service
 
@@ -122,7 +134,9 @@ pytest
 ```
 
 The test suite requires no Gemini key, no MongoDB, no network access, and no other
-running service — it drives the FastAPI app directly in-process via `TestClient`.
+running service — it drives the FastAPI app directly in-process via `TestClient`, and
+the Gemini-path tests (`tests/test_gemini_client.py`) monkeypatch the SDK client so
+error-mapping and response-parsing are proven without ever contacting Google's servers.
 
 ## Port
 

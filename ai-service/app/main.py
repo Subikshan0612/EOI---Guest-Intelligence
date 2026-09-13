@@ -1,16 +1,17 @@
 """
 KOI AI service — FastAPI application entry point.
 
-Phase 5 Step 3: deterministic Node <-> Python contract. This service does
-not call Gemini or any other LLM provider yet — see
-app/services/deterministic_stub.py and README.md for exactly what this step
-does and does not do.
+Phase 5 Step 4: real Gemini execution now lives here (app/services/
+gemini_client.py), alongside the deterministic stub from Step 3
+(app/services/deterministic_stub.py). Which one runs is decided entirely by
+this service's own LLM_PROVIDER config — see app/routers/intelligence.py.
 """
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.exceptions import AiServiceError
 from app.models.errors import ErrorDetail, ErrorResponse
 from app.routers import health, intelligence
 
@@ -35,4 +36,18 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 message="The request did not match the expected contract.",
             )
         ).model_dump(),
+    )
+
+
+@app.exception_handler(AiServiceError)
+async def ai_service_error_handler(request: Request, exc: AiServiceError) -> JSONResponse:
+    """
+    Converts an internal AiServiceError (raised by the provider services)
+    into this service's error contract. `exc.message` is always one of the
+    fixed, safe strings defined in app/exceptions.py — never a raw provider
+    exception, its message, or a credential.
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=ErrorResponse(error=ErrorDetail(code=exc.code, message=exc.message)).model_dump(),
     )

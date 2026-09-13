@@ -134,37 +134,65 @@ creates). Treat it as a hard boundary anyway:
 ## AI / RAG boundaries — read this before touching intelligence
 
 KOI's long-term plan includes RAG, embeddings, vector search, specialized agents, action
-orchestration, and a learning loop, plus a Python/FastAPI AI service. **None of that is implemented
-yet, and none of it should be added opportunistically.**
+orchestration, and a learning loop. **None of that is implemented yet, and none of it
+should be added opportunistically.**
 
-Phase 4 (current) introduced the first real AI layer — a single Node/Express intelligence pipeline:
+Phase 4 introduced the first real AI layer entirely inside Node/Express:
 `Signal → signalContextService.js (deterministic operational context) → services/ai/intelligenceService.js
-→ services/ai/llmProvider.js → validated structured Intelligence`. See
-`backend/src/services/ai/` for the implementation and `SignalIntelligencePage.jsx` for the UI.
+→ services/ai/llmProvider.js → validated structured Intelligence`. That code
+(`backend/src/services/ai/llmProvider.js`'s `gemini`/`openai`/`test` branches) is **kept intact as a
+rollback/reference path** — do not delete it opportunistically. It is no longer reachable via Node's
+`gemini` value (see Step 4 correction below) but remains fully wired for `openai`/`test` and as a
+revert target.
 
-- **Provider selection is a server-side-only concern** (`LLM_PROVIDER` env var) — never
-  client-controllable, never a request parameter.
-  - `gemini` — Google Gemini API (`@google/genai`), the primary free-tier development provider.
-  - `openai` — OpenAI chat completions (`openai` SDK), retained as an optional/future alternative.
-  - `test` — deterministic in-process fixture used only by `backend/scripts/validate-intelligence.mjs`;
-    makes no network call and must never be used for real usage.
-- Every provider must return output validated by `services/ai/intelligenceSchema.js` before it
-  reaches the client — the contract (`summary/findings/risk/decision/action/outcome/confidence/provenance`)
-  is fixed and provider-agnostic; provenance (`provider`/`model`) is always attached by the backend's
-  own config, never trusted from the model's own output.
-- Generated intelligence is **currently ephemeral** — nothing is persisted to the `Intelligence`
-  collection by this pipeline. Do not add persistence here without an explicit phase asking for it.
+Phase 5 introduced `ai-service/`, a sibling Python/FastAPI service that owns real model invocation:
+`React → Node assembleSignalContext() (tenant isolation + deterministic context, unconditional) →
+aiServiceClient.js → POST ai-service /v1/intelligence/signal → ai-service's own LLM_PROVIDER
+(test|gemini) → validated IntelligenceResponse → Node re-validates → React`. See
+`ai-service/README.md` for exactly what that service owns and does not own (no MongoDB, no
+tenant/workspace knowledge, no public frontend-facing API — it is only ever called from Node).
+
+- **Provider selection is a server-side-only concern**, on both Node's `LLM_PROVIDER` and
+  `ai-service`'s own `LLM_PROVIDER` — never client-controllable, never a request parameter. These are
+  two independent settings on two different processes — Node's value picks a *route*, `ai-service`'s
+  value (only consulted once Node has routed there) picks what that route actually executes.
+  - Node `LLM_PROVIDER=gemini` — **the real/default production path as of Step 4's correction.** Node
+    delegates to `ai-service` (`aiServiceClient.js`), which then calls Gemini itself if its own
+    `LLM_PROVIDER=gemini`. This is no longer a direct Node→Gemini call — `llmProvider.js`'s Gemini
+    branch sits unused behind it as rollback code.
+  - Node `LLM_PROVIDER=openai` — OpenAI chat completions, called directly from Node via
+    `llmProvider.js` (unaffected by the above — this path never touches `ai-service`). Retained as an
+    optional/future alternative.
+  - Node `LLM_PROVIDER=test` — deterministic in-process fixture via `llmProvider.js`; makes no
+    network call, never for real usage.
+  - Node `LLM_PROVIDER=test-python` — an alternate, explicit trigger for the identical `ai-service`
+    delegation path as `gemini` above (useful for deterministic Node→Python integration testing
+    without depending on `gemini` specifically). `gemini` is no longer the only value that stays off
+    Python, and `test-python` is no longer the only value that reaches it — both do the same thing.
+  - `ai-service`'s own `LLM_PROVIDER` (default `test`, deterministic stub) decides, independently of
+    which Node value triggered the delegation, whether the request that reaches it runs the stub
+    (`test`) or a real Gemini call via `gemini_client.py` (`gemini`). Node relays whatever provenance
+    `ai-service` honestly reports rather than assuming a label.
+- Every provider must return output validated against the shared contract
+  (`summary/findings/risk/decision/action/outcome/confidence/provenance`) before it reaches the
+  client — Node always re-validates via `services/ai/intelligenceSchema.js`, even when the content
+  came from `ai-service`. Provenance is always attached by whichever layer actually executed the
+  call, never trusted from the model's own output.
+- Generated intelligence is **currently ephemeral** in both Node and `ai-service` — nothing is
+  persisted to the `Intelligence` collection by either pipeline. Do not add persistence without an
+  explicit phase asking for it.
 - Generation is **explicitly user-triggered only** — never on page load, never via `useEffect`, no
   automatic retries or background/scheduled generation. This is a deliberate cost-control boundary.
 
 Until a phase explicitly authorizes it, do **not** introduce:
 - RAG, embeddings, or a vector database
 - LangGraph or other agent frameworks
-- Autonomous actions, background AI workers, or a Python AI service (Python/FastAPI is Phase 5)
+- Autonomous actions or background AI workers
+- MongoDB access, tenant/workspace logic, or a public API surface inside `ai-service/`
 
 The Phase-1 mock intelligence system (`chatService.js` + `intelligenceContract.js`) remains intact
 and is still used by the unrelated Chat feature — it is a separate, pre-existing code path from the
-Phase 4 AI pipeline above, not a fallback for it.
+Phase 4/5 AI pipelines above, not a fallback for either.
 
 ## Phase discipline
 
@@ -179,9 +207,21 @@ KOI is built in explicit phases; don't jump ahead.
   - 3C — Signal ingestion
   - 3D — Signal → Guest → Stay → Unit deterministic context assembly
   - 3E — Operational Intelligence UI (signal detail → context → intelligence page)
-- **Phase 4** — First real AI intelligence engine (Node/Express, no Python yet). **Done** — see the
-  AI/RAG boundaries section above for the current architecture.
-- **Phase 5 (not started)** — Python/FastAPI AI service.
+- **Phase 4** — First real AI intelligence engine (Node/Express, no Python yet). **Done** — kept
+  intact as the rollback/reference path (`llmProvider.js`); see the AI/RAG boundaries section above.
+- **Phase 5 (in progress)** — Python/FastAPI AI service (`ai-service/`).
+  - Step 1 — architecture inspection/design. **Done.**
+  - Step 2 — FastAPI foundation, health endpoint only. **Done.**
+  - Step 3 — deterministic Node↔Python contract (request/response/error shapes, stub generator). **Done.**
+  - Step 4 — real Gemini execution moved into `ai-service` (`gemini_client.py`). **Done, then
+    corrected**: the initial Step 4 implementation only routed Node's `test-python` value to Python,
+    leaving `gemini` (the real default) on the old direct path — a gap the user caught and had fixed
+    in the same step. As corrected, Node's `LLM_PROVIDER=gemini` now delegates to `ai-service` by
+    default (`test-python` kept as a secondary explicit trigger for the same path); `llmProvider.js`
+    remains untouched as rollback/reference code. `React → Node → Python → Gemini` is now the real,
+    verified production path (see AI/RAG boundaries section above for the full routing table).
+  - Remaining — further production hardening/observability of the Python path as needed; no further
+    routing migration is pending.
 - **Later** — RAG, embeddings, vector search, agents, actions, outcomes, learning loop.
 
 Rules:

@@ -51,7 +51,12 @@ export async function requestIntelligenceFromAiService(context) {
     throw mapAiServiceError(body, response.status);
   }
 
-  return { raw: body, model: body?.provenance?.model };
+  // Python's own provenance is trusted here (unlike a raw LLM's own JSON
+  // output): it is Python's honest self-report of which internal path it
+  // just executed (its deterministic stub vs. its real Gemini client),
+  // attached by Python's own trusted code, not by whatever came back from
+  // an external model.
+  return { raw: body, provider: body?.provenance?.provider, model: body?.provenance?.model };
 }
 
 /**

@@ -65,7 +65,7 @@ VALID_RESPONSE_DICT = {
     "action": {"label": "a", "recommended": [{"step": "s", "priority": "low"}]},
     "outcome": {"expected": "o"},
     "confidence": 0.5,
-    "provenance": {"provider": "test-python", "model": "deterministic-stub"},
+    "provenance": {"provider": "test", "model": "deterministic-stub"},
 }
 
 
@@ -82,7 +82,11 @@ def test_intelligence_signal_response_structure_is_valid():
     # contract — not just "is this JSON", but "is this a valid
     # IntelligenceResponse".
     validated = IntelligenceResponse(**body)
-    assert validated.provenance.provider == "test-python"
+    # "test" is this service's own provider identity (LLM_PROVIDER=test,
+    # the default) — not Node's "test-python" env value, which only means
+    # "delegate to this service." Node relays this value honestly rather
+    # than hard-coding a label (Phase 5 Step 4).
+    assert validated.provenance.provider == "test"
     assert validated.provenance.model == "deterministic-stub"
 
 

@@ -219,10 +219,14 @@ async function main() {
         200,
       );
       assertValidIntelligenceShape("5.1: structured shape valid", validRes.json?.data);
-      if (validRes.json?.data?.provenance?.provider === "test-python") {
-        ok("5.1: provenance honestly reports test-python");
+      // "test" is Python's own honest self-report (its LLM_PROVIDER default)
+      // — Node's "test-python" env value only means "delegate to Python"
+      // (Phase 5 Step 4: Node relays Python's real provenance rather than
+      // hard-coding a label).
+      if (validRes.json?.data?.provenance?.provider === "test") {
+        ok("5.1: provenance honestly reports Python's own provider (test)");
       } else {
-        fail("5.1: provenance honestly reports test-python", JSON.stringify(validRes.json?.data?.provenance));
+        fail("5.1: provenance honestly reports Python's own provider (test)", JSON.stringify(validRes.json?.data?.provenance));
       }
       if (validRes.json?.data?.provenance?.model === "deterministic-stub") {
         ok("5.1: provenance reports the deterministic-stub model");
@@ -298,6 +302,48 @@ async function main() {
       } else {
         fail("5.7: no internal error/stack detail leaked for unreachable Python service", text);
       }
+    },
+  );
+
+  // === Phase 5 Step 4 correction: LLM_PROVIDER=gemini delegates to Python
+  // identically to LLM_PROVIDER=test-python. This proves "gemini" is no
+  // longer a direct Node->Gemini call (llmProvider.js) — it now reaches the
+  // same aiServiceClient.js -> Python path, confirmed by getting back
+  // Python's own honestly-reported provenance (Python's LLM_PROVIDER default
+  // is "test", so the deterministic stub runs — no real Gemini call is made
+  // here, only the delegation itself is verified). ===
+  await withEphemeralServer(
+    5067,
+    { LLM_PROVIDER: "gemini", AI_SERVICE_URL: PYTHON_BASE },
+    async (base) => {
+      const res = await expectStatus(
+        base,
+        "5.8: LLM_PROVIDER=gemini delegates to Python (not the direct llmProvider.js path)",
+        "POST",
+        `/signals/${signalA}/intelligence?workspaceId=${wsA}`,
+        null,
+        200,
+      );
+      assertValidIntelligenceShape("5.8: structured shape valid", res.json?.data);
+      if (res.json?.data?.provenance?.provider === "test") {
+        ok("5.8: provenance is Python's own honest self-report, proving delegation occurred");
+      } else {
+        fail(
+          "5.8: provenance is Python's own honest self-report, proving delegation occurred",
+          JSON.stringify(res.json?.data?.provenance),
+        );
+      }
+
+      // Tenant/context validation still happens in Node, before Python is
+      // ever reached, even on this "gemini" trigger value.
+      await expectStatus(
+        base,
+        "5.9: tenant isolation still enforced in Node before Python (gemini trigger)",
+        "POST",
+        `/signals/${signalB}/intelligence?workspaceId=${wsA}`,
+        null,
+        404,
+      );
     },
   );
 

@@ -6,7 +6,26 @@ import { getActiveProviderInfo, isAiConfigured, requestStructuredIntelligence } 
 import { requestIntelligenceFromAiService } from "./aiServiceClient.js";
 import { validateIntelligenceResult } from "./intelligenceSchema.js";
 
-const PYTHON_TEST_PROVIDER = "test-python";
+/**
+ * Node provider values that delegate generation to the Python AI service
+ * (ai-service/) rather than calling a provider directly from Node.
+ *
+ * - "gemini"      — Phase 5 Step 4 correction: this is now the real,
+ *                    production/default route to Gemini. It no longer calls
+ *                    llmProvider.js's direct Gemini branch — Node delegates
+ *                    to Python, and Python's OWN LLM_PROVIDER decides
+ *                    whether that call is real (its `gemini` value, via
+ *                    gemini_client.py) or a deterministic stub (its `test`
+ *                    value, the safe default).
+ * - "test-python" — kept as an explicit, secondary way to reach the same
+ *                    Python delegation path (useful for deterministic
+ *                    Node→Python integration testing without relying on
+ *                    "gemini" also being the value under test). "gemini" is
+ *                    no longer the only value that stays off Python, and
+ *                    "test-python" is no longer the only value that reaches
+ *                    it — both now do the identical thing.
+ */
+const PYTHON_ROUTED_PROVIDERS = new Set(["gemini", "test-python"]);
 
 /**
  * Signal → deterministic Operational Context (Phase 3D, reused as-is) → AI
@@ -17,30 +36,30 @@ const PYTHON_TEST_PROVIDER = "test-python";
  * Nothing here is persisted: every call re-generates a fresh interpretation
  * from the current operational facts. Ephemeral by design for this phase.
  *
- * `LLM_PROVIDER=test-python` (Phase 5 Step 3) is a separate, explicitly-opt-in
- * branch that routes to the Python AI service's deterministic stub instead
- * of llmProvider.js's gemini/openai/test paths. It is intentionally handled
- * here rather than inside llmProvider.js, which stays completely unmodified —
- * the existing gemini/openai/test modes are unaffected by this addition.
+ * `LLM_PROVIDER=openai` and `LLM_PROVIDER=test` still flow through
+ * llmProvider.js exactly as before — that file is untouched. Only `gemini`
+ * (as of this correction) and `test-python` route to Python; Node relays
+ * whatever provenance Python honestly reports rather than assuming either
+ * one, since Python — not Node — knows which of its own code paths it ran.
  */
 export async function generateSignalIntelligence(signalId, workspaceId, { testScenario } = {}) {
   const scope = requireObjectId(workspaceId, "workspaceId");
   const id = requireObjectId(signalId, "id");
 
   // Throws 404 for a missing/cross-tenant Signal before any AI call is made —
-  // this happens before either the Node providers or the Python service is
+  // this happens before either Node's own providers or the Python service is
   // ever reached, so the tenant boundary is enforced identically either way.
   const context = await assembleSignalContext(id, scope);
 
   const provider = (process.env.LLM_PROVIDER || "").trim().toLowerCase();
 
-  if (provider === PYTHON_TEST_PROVIDER) {
-    const { raw, model } = await requestIntelligenceFromAiService(context);
+  if (PYTHON_ROUTED_PROVIDERS.has(provider)) {
+    const { raw, provider: pyProvider, model } = await requestIntelligenceFromAiService(context);
     const intelligence = validateIntelligenceResult(raw);
 
     return {
       ...intelligence,
-      provenance: { provider: PYTHON_TEST_PROVIDER, model: model || "unknown" },
+      provenance: { provider: pyProvider || "python", model: model || "unknown" },
     };
   }
 
