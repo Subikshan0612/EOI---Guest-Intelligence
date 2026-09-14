@@ -16,3 +16,10 @@ export { Intelligence, RISK_LEVELS, GENERATED_BY } from "./Intelligence.js";
 export { Decision, DECISION_PRIORITIES, DECISION_STATUSES } from "./Decision.js";
 export { Action, ACTION_STATUSES } from "./Action.js";
 export { Outcome, OUTCOME_STATUSES } from "./Outcome.js";
+export {
+  KnowledgeDocument,
+  KNOWLEDGE_DOCUMENT_TYPES,
+  KNOWLEDGE_SOURCE_TYPES,
+  KNOWLEDGE_STATUSES,
+} from "./KnowledgeDocument.js";
+export { KnowledgeChunk } from "./KnowledgeChunk.js";

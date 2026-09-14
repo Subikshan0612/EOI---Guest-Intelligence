@@ -11,6 +11,7 @@ import { intelligenceRoutes } from "./intelligenceRoutes.js";
 import { decisionRoutes } from "./decisionRoutes.js";
 import { actionRoutes } from "./actionRoutes.js";
 import { outcomeRoutes } from "./outcomeRoutes.js";
+import { knowledgeDocumentRoutes } from "./knowledgeDocumentRoutes.js";
 
 const apiRouter = Router();
 
@@ -26,5 +27,6 @@ apiRouter.use("/intelligence", intelligenceRoutes);
 apiRouter.use("/decisions", decisionRoutes);
 apiRouter.use("/actions", actionRoutes);
 apiRouter.use("/outcomes", outcomeRoutes);
+apiRouter.use("/knowledge-documents", knowledgeDocumentRoutes);
 
 export { apiRouter };
