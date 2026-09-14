@@ -3,17 +3,18 @@ import { AppError } from "../../utils/AppError.js";
 const REQUEST_TIMEOUT_MS = 20000;
 
 /**
- * Thin HTTP client to the Python AI service (Phase 5). Its only job is to
- * POST an already-assembled Signal context and translate the service's
- * response — or its failure — into the same safe application errors the
- * OpenAI path in llmProvider.js already produces.
+ * Thin HTTP client to the Python AI service. Its only job is to POST a
+ * request and translate the service's response — or its failure — into the
+ * same safe application errors the OpenAI path in llmProvider.js already
+ * produces. Shared by both endpoints this service exposes: intelligence
+ * generation (Phase 5) and embedding generation (Phase 6E).
  *
  * This module never assembles operational context, never touches MongoDB,
  * never resolves tenancy, and never contains any provider-specific (Gemini)
- * logic — Gemini execution lives entirely in the Python service
- * (app/services/gemini_client.py); Node has no Gemini client of its own.
+ * logic — all provider execution lives entirely in the Python service;
+ * Node has no Gemini or embedding-provider client of its own.
  */
-export async function requestIntelligenceFromAiService(context) {
+async function postToAiService(path, payload) {
   const baseUrl = (process.env.AI_SERVICE_URL || "").trim();
   if (!baseUrl) {
     throw new AppError("AI intelligence service is not configured.", 503);
@@ -24,10 +25,10 @@ export async function requestIntelligenceFromAiService(context) {
 
   let response;
   try {
-    response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/intelligence/signal`, {
+    response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ context }),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
   } catch (error) {
@@ -51,12 +52,30 @@ export async function requestIntelligenceFromAiService(context) {
     throw mapAiServiceError(body, response.status);
   }
 
+  return body;
+}
+
+export async function requestIntelligenceFromAiService(context) {
+  const body = await postToAiService("/v1/intelligence/signal", { context });
+
   // Python's own provenance is trusted here (unlike a raw LLM's own JSON
   // output): it is Python's honest self-report of which internal path it
   // just executed (its deterministic stub vs. its real Gemini client),
   // attached by Python's own trusted code, not by whatever came back from
   // an external model.
   return { raw: body, provider: body?.provenance?.provider, model: body?.provenance?.model };
+}
+
+/**
+ * Phase 6E — requests embedding vectors for already-chunked KnowledgeChunk
+ * text. Sends only `texts`: no workspaceId, no MongoDB identifiers, no
+ * tenant concept of any kind travels to Python (see knowledgeEmbeddingService.js
+ * for where tenant scoping and persistence actually happen — both on the
+ * Node side, never in Python).
+ */
+export async function requestEmbeddingsFromAiService(texts) {
+  const body = await postToAiService("/v1/embeddings", { texts });
+  return { embeddings: body?.embeddings, model: body?.model };
 }
 
 /**

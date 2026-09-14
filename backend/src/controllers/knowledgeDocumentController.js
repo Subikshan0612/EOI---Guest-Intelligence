@@ -2,6 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendList, sendSuccess } from "../utils/response.js";
 import * as knowledgeDocumentService from "../services/knowledgeDocumentService.js";
 import * as knowledgeChunkService from "../services/knowledgeChunkService.js";
+import * as knowledgeEmbeddingService from "../services/knowledgeEmbeddingService.js";
 
 export const createKnowledgeDocument = asyncHandler(async (req, res) => {
   const data = await knowledgeDocumentService.createKnowledgeDocument(req.body);
@@ -54,4 +55,13 @@ export const listKnowledgeChunks = asyncHandler(async (req, res) => {
     req.query.workspaceId,
   );
   sendList(res, items, pagination);
+});
+
+/** Phase 6E — embeds the document's current chunks via Python. No request body: chunk text is loaded from MongoDB, never accepted from a caller. */
+export const embedKnowledgeDocument = asyncHandler(async (req, res) => {
+  const data = await knowledgeEmbeddingService.embedKnowledgeDocument(
+    req.params.documentId,
+    req.query.workspaceId,
+  );
+  sendSuccess(res, data, 201);
 });

@@ -25,5 +25,16 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     request_timeout_ms: int = 20000
 
+    # Phase 6E — independent of llm_provider/llm_model above: embeddings and
+    # intelligence generation are two separate concerns that happen to share
+    # the same Gemini API key. "test" (deterministic, no network call) is the
+    # default for the exact same reason llm_provider defaults to "test".
+    embedding_provider: str = "test"
+    embedding_model: str = "gemini-embedding-001"
+    # Conservative initial value (Phase 6A report style): small enough to
+    # keep one provider request fast and well within payload limits, large
+    # enough that a typical SOP's chunk set fits in one or two batches.
+    embedding_batch_size: int = 20
+
 
 settings = Settings()

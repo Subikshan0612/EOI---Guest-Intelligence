@@ -3,6 +3,7 @@ import {
   chunkKnowledgeDocument,
   createKnowledgeDocument,
   deleteKnowledgeDocument,
+  embedKnowledgeDocument,
   getKnowledgeDocument,
   listKnowledgeChunks,
   listKnowledgeDocuments,
@@ -19,6 +20,11 @@ knowledgeDocumentRoutes.get("/", listKnowledgeDocuments);
 // GET reads back. Defined before the generic /:id routes below.
 knowledgeDocumentRoutes.post("/:documentId/chunks", chunkKnowledgeDocument);
 knowledgeDocumentRoutes.get("/:documentId/chunks", listKnowledgeChunks);
+
+// Phase 6E — embeds the document's existing chunks. No GET counterpart:
+// GET .../chunks above already returns each chunk's embedding/embeddingModel,
+// so a second read endpoint would be redundant.
+knowledgeDocumentRoutes.post("/:documentId/embeddings", embedKnowledgeDocument);
 
 knowledgeDocumentRoutes.get("/:id", getKnowledgeDocument);
 knowledgeDocumentRoutes.patch("/:id", updateKnowledgeDocument);

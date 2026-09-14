@@ -1,10 +1,15 @@
 """
 KOI AI service — FastAPI application entry point.
 
-Phase 5 Step 4: real Gemini execution now lives here (app/services/
-gemini_client.py), alongside the deterministic stub from Step 3
+Phase 5 Step 4: real Gemini execution lives in app/services/gemini_client.py,
+alongside the deterministic stub from Step 3
 (app/services/deterministic_stub.py). Which one runs is decided entirely by
 this service's own LLM_PROVIDER config — see app/routers/intelligence.py.
+
+Phase 6E: embedding generation is a separate concern with its own endpoint
+(app/routers/embeddings.py), its own provider config (EMBEDDING_PROVIDER),
+and its own deterministic/real implementations
+(app/services/deterministic_embedding.py, app/services/gemini_embedding_client.py).
 """
 
 from fastapi import FastAPI, Request
@@ -13,12 +18,13 @@ from fastapi.responses import JSONResponse
 
 from app.exceptions import AiServiceError
 from app.models.errors import ErrorDetail, ErrorResponse
-from app.routers import health, intelligence
+from app.routers import embeddings, health, intelligence
 
 app = FastAPI(title="KOI AI Service")
 
 app.include_router(health.router)
 app.include_router(intelligence.router)
+app.include_router(embeddings.router)
 
 
 @app.exception_handler(RequestValidationError)
