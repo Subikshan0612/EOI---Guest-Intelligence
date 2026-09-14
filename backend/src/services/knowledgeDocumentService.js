@@ -18,9 +18,12 @@ import {
 } from "./queryHelpers.js";
 
 /**
- * Phase 6B — thin CRUD only. No ingestion, chunking, embeddings, or
- * retrieval logic lives here (see the Phase 6A architecture report). This
- * mirrors propertyService.js/signalService.js exactly: the same
+ * Phase 6B — thin CRUD only. Phase 6C confirmed this same POST is the
+ * authoring/ingestion contract (no new endpoint was needed) and tightened
+ * two validations create relies on (assertNonBlankContent,
+ * assertValidVersion, below). No chunking, embeddings, or retrieval logic
+ * lives here (see the Phase 6A architecture report). This mirrors
+ * propertyService.js/signalService.js exactly: the same
  * requireObjectId/findInWorkspaceOr404/assertSameWorkspace pattern already
  * proven for every other tenant-owned resource.
  *
@@ -46,6 +49,31 @@ function assertValidDate(value, fieldName) {
   if (value === undefined || value === null || value === "") return;
   if (Number.isNaN(new Date(value).getTime())) {
     throw new AppError(`${fieldName} is not a valid date`, 400);
+  }
+}
+
+/**
+ * `content` has no schema-level `trim` (Phase 6B deliberately preserves an
+ * SOP's exact formatting), so — unlike `title` — a whitespace-only value
+ * would otherwise pass Mongoose's `required` check untrimmed. Checked here,
+ * explicitly, rather than added to the model.
+ */
+function assertNonBlankContent(value) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new AppError("content is required", 400);
+  }
+}
+
+/**
+ * The schema's `min: 1` alone accepts non-integers (e.g. 1.5) — versions are
+ * a monotonic integer lineage (Phase 6A report, Section 6), not an arbitrary
+ * number, so that's checked explicitly on create.
+ */
+function assertValidVersion(value) {
+  if (value === undefined || value === null) return;
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric < 1) {
+    throw new AppError("version must be a positive integer", 400);
   }
 }
 
@@ -86,6 +114,8 @@ async function validateOptionalRefs(workspaceId, refs) {
 
 export async function createKnowledgeDocument(body) {
   requireFields(body, ["workspaceId", "title", "documentType", "content"]);
+  assertNonBlankContent(body.content);
+  assertValidVersion(body.version);
   const workspaceId = requireObjectId(body.workspaceId, "workspaceId");
   assertValidDate(body.effectiveFrom, "effectiveFrom");
   assertValidDate(body.effectiveTo, "effectiveTo");
