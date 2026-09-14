@@ -1,6 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendList, sendSuccess } from "../utils/response.js";
 import * as knowledgeDocumentService from "../services/knowledgeDocumentService.js";
+import * as knowledgeChunkService from "../services/knowledgeChunkService.js";
 
 export const createKnowledgeDocument = asyncHandler(async (req, res) => {
   const data = await knowledgeDocumentService.createKnowledgeDocument(req.body);
@@ -35,4 +36,22 @@ export const deleteKnowledgeDocument = asyncHandler(async (req, res) => {
     req.query.workspaceId,
   );
   sendSuccess(res, data);
+});
+
+/** Phase 6D — (re)chunks the document's current canonical content. No request body: chunking derives entirely from the document Node already holds. */
+export const chunkKnowledgeDocument = asyncHandler(async (req, res) => {
+  const data = await knowledgeChunkService.rebuildChunksForDocument(
+    req.params.documentId,
+    req.query.workspaceId,
+  );
+  sendSuccess(res, data, 201);
+});
+
+export const listKnowledgeChunks = asyncHandler(async (req, res) => {
+  const { items, pagination } = await knowledgeChunkService.listKnowledgeChunks(
+    req.params.documentId,
+    req.query,
+    req.query.workspaceId,
+  );
+  sendList(res, items, pagination);
 });
