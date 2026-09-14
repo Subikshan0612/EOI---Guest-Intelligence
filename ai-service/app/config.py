@@ -36,5 +36,14 @@ class Settings(BaseSettings):
     # enough that a typical SOP's chunk set fits in one or two batches.
     embedding_batch_size: int = 20
 
+    # Phase 6F — the /v1/vector-similarity primitive. Independent of
+    # embedding_batch_size above (a different concern: how many candidates
+    # one similarity request may score in memory, not how many texts one
+    # embedding request may embed). A request over this limit is rejected
+    # outright, never silently truncated. Conservative starting point:
+    # bounded by a document's own chunk count for now, well within what
+    # pure-Python in-memory scoring handles instantly.
+    similarity_max_candidates: int = 200
+
 
 settings = Settings()

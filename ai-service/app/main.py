@@ -10,6 +10,10 @@ Phase 6E: embedding generation is a separate concern with its own endpoint
 (app/routers/embeddings.py), its own provider config (EMBEDDING_PROVIDER),
 and its own deterministic/real implementations
 (app/services/deterministic_embedding.py, app/services/gemini_embedding_client.py).
+
+Phase 6F: a similarity PRIMITIVE (app/routers/vector_similarity.py) — pure
+cosine similarity over vectors the caller supplies, no MongoDB, no provider
+call, no retrieval/ranking policy. Not the Phase 6G retrieval endpoint.
 """
 
 from fastapi import FastAPI, Request
@@ -18,13 +22,14 @@ from fastapi.responses import JSONResponse
 
 from app.exceptions import AiServiceError
 from app.models.errors import ErrorDetail, ErrorResponse
-from app.routers import embeddings, health, intelligence
+from app.routers import embeddings, health, intelligence, vector_similarity
 
 app = FastAPI(title="KOI AI Service")
 
 app.include_router(health.router)
 app.include_router(intelligence.router)
 app.include_router(embeddings.router)
+app.include_router(vector_similarity.router)
 
 
 @app.exception_handler(RequestValidationError)
