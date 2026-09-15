@@ -79,6 +79,20 @@ export async function requestEmbeddingsFromAiService(texts) {
 }
 
 /**
+ * Phase 6G — requests a ranked list of already-selected, already-tenant-
+ * scoped candidates against a fresh embedding of `queryText`. Sends only
+ * `queryText` and each candidate's `{chunkId, embedding, scope}`: no
+ * workspaceId, no document/property/unit identifiers, no MongoDB data of
+ * any kind travels to Python (see knowledgeRetrievalService.js for where
+ * candidate selection, tenant scoping, and result re-verification actually
+ * happen — all on the Node side, never in Python).
+ */
+export async function requestKnowledgeRetrievalFromAiService(queryText, candidates) {
+  const body = await postToAiService("/v1/knowledge-retrieval", { queryText, candidates });
+  return { results: body?.results, model: body?.model };
+}
+
+/**
  * Maps the AI service's own error contract ({error:{code,message}}) to a
  * safe Node-facing AppError. Never forwards the service's raw message
  * verbatim, and never logs anything beyond the code/status — the same

@@ -14,6 +14,13 @@ and its own deterministic/real implementations
 Phase 6F: a similarity PRIMITIVE (app/routers/vector_similarity.py) — pure
 cosine similarity over vectors the caller supplies, no MongoDB, no provider
 call, no retrieval/ranking policy. Not the Phase 6G retrieval endpoint.
+
+Phase 6G: knowledge retrieval (app/routers/retrieval.py) — embeds a Node-
+supplied query string (reusing app/services/embedding_service.py) and
+ranks Node-selected, tenant-scoped candidates against it (reusing the
+Phase 6F cosine similarity primitive) with a deterministic Unit > Property
+> Workspace scope preference. Still no MongoDB, no tenant decision, and no
+Gemini intelligence generation — this is retrieval only, not RAG.
 """
 
 from fastapi import FastAPI, Request
@@ -22,7 +29,7 @@ from fastapi.responses import JSONResponse
 
 from app.exceptions import AiServiceError
 from app.models.errors import ErrorDetail, ErrorResponse
-from app.routers import embeddings, health, intelligence, vector_similarity
+from app.routers import embeddings, health, intelligence, retrieval, vector_similarity
 
 app = FastAPI(title="KOI AI Service")
 
@@ -30,6 +37,7 @@ app.include_router(health.router)
 app.include_router(intelligence.router)
 app.include_router(embeddings.router)
 app.include_router(vector_similarity.router)
+app.include_router(retrieval.router)
 
 
 @app.exception_handler(RequestValidationError)

@@ -3,6 +3,7 @@ import { sendList, sendSuccess } from "../utils/response.js";
 import * as signalService from "../services/signalService.js";
 import { assembleSignalContext } from "../services/signalContextService.js";
 import { generateSignalIntelligence as generateSignalIntelligenceService } from "../services/ai/intelligenceService.js";
+import { retrieveKnowledgeForSignal } from "../services/knowledgeRetrievalService.js";
 
 export const createSignal = asyncHandler(async (req, res) => {
   const data = await signalService.createSignal(req.body);
@@ -38,5 +39,14 @@ export const generateSignalIntelligence = asyncHandler(async (req, res) => {
   const data = await generateSignalIntelligenceService(req.params.id, req.query.workspaceId, {
     testScenario: req.query.__testScenario,
   });
+  sendSuccess(res, data);
+});
+
+/**
+ * Phase 6G — retrieval only, development/validation endpoint. Not wired
+ * into intelligence generation; that integration is Phase 6H's job.
+ */
+export const getSignalKnowledgeRetrieval = asyncHandler(async (req, res) => {
+  const data = await retrieveKnowledgeForSignal(req.params.id, req.query.workspaceId);
   sendSuccess(res, data);
 });

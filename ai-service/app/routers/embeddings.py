@@ -12,27 +12,20 @@ Same server-side-only provider-selection principle as intelligence.py:
 the request contract (app/models/embedding.py) has no provider field, and
 no workspaceId, MongoDB identifier, or tenant concept of any kind — Node
 alone decides which chunks to embed and persists the result.
+
+Provider dispatch itself lives in app/services/embedding_service.py (Phase
+6G extracted it there so the retrieval router could reuse it in-process)
+— this router is now just the HTTP-shaped wrapper around it.
 """
 
 from fastapi import APIRouter
 
-from app.config import settings
-from app.exceptions import ProviderNotConfiguredError
 from app.models.embedding import EmbeddingRequest, EmbeddingResponse
-from app.services.deterministic_embedding import generate_deterministic_embeddings
-from app.services.gemini_embedding_client import generate_gemini_embeddings
+from app.services.embedding_service import generate_embeddings
 
 router = APIRouter()
 
 
 @router.post("/v1/embeddings", response_model=EmbeddingResponse)
 def post_embeddings(payload: EmbeddingRequest) -> EmbeddingResponse:
-    provider = settings.embedding_provider.strip().lower()
-
-    if provider == "test":
-        return generate_deterministic_embeddings(payload.texts)
-
-    if provider == "gemini":
-        return generate_gemini_embeddings(payload.texts)
-
-    raise ProviderNotConfiguredError()
+    return generate_embeddings(payload.texts)
