@@ -11,6 +11,12 @@ what actually generates the response:
 This mirrors the exact same server-side-only provider selection principle
 already established on the Node side (backend/src/services/ai/
 llmProvider.js's readConfig()).
+
+Phase 6H: `payload.knowledge` (optional, empty by default) carries already-
+retrieved, already-tenant-verified organizational knowledge from Node's
+Phase 6G retrieval pipeline — passed straight through to whichever
+provider function runs. This router makes no MongoDB query and no
+retrieval decision of its own; it only routes.
 """
 
 from fastapi import APIRouter
@@ -29,9 +35,9 @@ def post_intelligence_signal(payload: IntelligenceRequest) -> IntelligenceRespon
     provider = settings.llm_provider.strip().lower()
 
     if provider == "test":
-        return generate_deterministic_intelligence(payload.context)
+        return generate_deterministic_intelligence(payload.context, payload.knowledge)
 
     if provider == "gemini":
-        return generate_gemini_intelligence(payload.context)
+        return generate_gemini_intelligence(payload.context, payload.knowledge)
 
     raise ProviderNotConfiguredError()

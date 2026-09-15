@@ -10,8 +10,18 @@ import { AppError } from "../../utils/AppError.js";
  */
 export const RISK_LEVELS = ["low", "medium", "high", "critical"];
 export const ACTION_PRIORITIES = ["low", "medium", "high"];
+export const KNOWLEDGE_SCOPES = ["unit", "property", "workspace"];
 
-/** JSON Schema handed to the provider's structured-output mode. */
+/**
+ * JSON Schema handed to the provider's structured-output mode. Used only
+ * by the direct Node->OpenAI path in llmProvider.js — the Python-delegated
+ * path (LLM_PROVIDER=gemini/test-python, KOI's production route) has its
+ * own separate, knowledge-grounding-aware schema
+ * (ai-service/app/services/gemini_client.py's GEMINI_RESPONSE_SCHEMA).
+ * This one is deliberately NOT extended with knowledge fields in Phase
+ * 6H — see intelligenceService.js and CLAUDE.md's AI/RAG boundaries
+ * section for why grounding lives only on the Python-delegated path.
+ */
 export const INTELLIGENCE_JSON_SCHEMA = {
   type: "object",
   properties: {
@@ -78,6 +88,37 @@ function isNonEmptyString(value) {
 }
 
 /**
+ * Phase 6H — one item of `raw.knowledgeProvenance`. This is Python's own
+ * (already cross-checked against what it was actually supplied — see
+ * ai-service/app/services/gemini_client.py's _build_knowledge_provenance)
+ * report of which retrieved knowledge materially influenced the result.
+ * Node still validates every field's shape here — the same "never trust
+ * the raw response until it passes this validation" rule as every other
+ * field — and, one layer further out, intelligenceService.js independently
+ * re-checks each chunkId against its own Phase 6G retrieval result before
+ * this ever reaches a caller (provenance cannot escape the retrieved
+ * result set for THIS request, not just "was validly shaped").
+ */
+function isValidKnowledgeProvenanceItem(item) {
+  return (
+    item !== null &&
+    typeof item === "object" &&
+    isNonEmptyString(item.chunkId) &&
+    isNonEmptyString(item.knowledgeDocumentId) &&
+    Number.isInteger(item.version) &&
+    item.version >= 1 &&
+    KNOWLEDGE_SCOPES.includes(item.scope) &&
+    typeof item.section === "string" &&
+    Number.isInteger(item.chunkIndex) &&
+    item.chunkIndex >= 0 &&
+    typeof item.similarityScore === "number" &&
+    Number.isFinite(item.similarityScore) &&
+    typeof item.retrievalScore === "number" &&
+    Number.isFinite(item.retrievalScore)
+  );
+}
+
+/**
  * Validates and normalizes a parsed AI response against the contract above.
  * Rejects (rather than silently coercing) anything out of range — an
  * out-of-scale confidence value or an unrecognized risk level is treated as
@@ -127,6 +168,17 @@ export function validateIntelligenceResult(raw) {
     fail("invalid confidence");
   }
 
+  // Phase 6H — optional and absent for every pre-6H caller/fixture
+  // (openai/test never populate it at all). Present-but-malformed is
+  // still rejected outright, same as every other field here.
+  let knowledgeProvenance = [];
+  if (raw.knowledgeProvenance !== undefined) {
+    if (!Array.isArray(raw.knowledgeProvenance) || !raw.knowledgeProvenance.every(isValidKnowledgeProvenanceItem)) {
+      fail("invalid knowledgeProvenance");
+    }
+    knowledgeProvenance = raw.knowledgeProvenance;
+  }
+
   return {
     summary: raw.summary.trim(),
     findings: raw.findings.map((item) => item.trim()).filter(Boolean),
@@ -144,5 +196,15 @@ export function validateIntelligenceResult(raw) {
     },
     outcome: { expected: raw.outcome.expected.trim() },
     confidence: raw.confidence,
+    knowledgeProvenance: knowledgeProvenance.map((item) => ({
+      chunkId: item.chunkId,
+      knowledgeDocumentId: item.knowledgeDocumentId,
+      version: item.version,
+      scope: item.scope,
+      section: item.section,
+      chunkIndex: item.chunkIndex,
+      similarityScore: item.similarityScore,
+      retrievalScore: item.retrievalScore,
+    })),
   };
 }

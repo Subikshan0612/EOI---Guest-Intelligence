@@ -123,6 +123,13 @@ function compareResults(a, b) {
  * Python process, which isn't something a test can safely simulate over
  * HTTP; calling this function directly with a fabricated response proves
  * the same guarantee.
+ *
+ * Includes each chunk's own `text` (Phase 6H) — the standalone retrieval
+ * endpoint already returning the full verified chunk record is a small,
+ * purely additive, backward-compatible extension (no existing consumer
+ * asserts a closed/exact result shape), and it is what lets
+ * intelligenceService.js reuse this exact result as Python's grounding
+ * input with zero remapping.
  */
 export function verifyAndBuildResults(pythonResults, eligibleChunksById) {
   const verified = [];
@@ -143,6 +150,7 @@ export function verifyAndBuildResults(pythonResults, eligibleChunksById) {
       scope: expectedScope,
       section: chunk.section,
       chunkIndex: chunk.chunkIndex,
+      text: chunk.text,
       similarityScore: result.similarityScore,
       retrievalScore: result.retrievalScore,
     });
@@ -153,16 +161,21 @@ export function verifyAndBuildResults(pythonResults, eligibleChunksById) {
 }
 
 /**
- * Retrieves the top-K knowledge chunks relevant to one Signal's trusted
- * operational context. Read-only: nothing is persisted, no Intelligence
- * document is created, no operational fact is touched. Degrades
- * gracefully when context is incomplete (no property/unit/guest/stay) —
- * it retrieves from whatever scopes are legitimately available rather
- * than fabricating missing context.
+ * Retrieves the top-K knowledge chunks relevant to an already-assembled,
+ * already-trusted operational context. Read-only: nothing is persisted, no
+ * Intelligence document is created, no operational fact is touched.
+ * Degrades gracefully when context is incomplete (no property/unit/guest/
+ * stay) — it retrieves from whatever scopes are legitimately available
+ * rather than fabricating missing context.
+ *
+ * Takes `context` rather than assembling it itself so a caller that has
+ * already called assembleSignalContext (Phase 6H's intelligenceService.js,
+ * grounding the same generation request) never triggers a second,
+ * redundant Signal lookup. retrieveKnowledgeForSignal below is the
+ * original, still-unchanged entry point for callers (the standalone
+ * retrieval endpoint) that only have a signalId.
  */
-export async function retrieveKnowledgeForSignal(signalId, workspaceId) {
-  const context = await assembleSignalContext(signalId, workspaceId);
-
+export async function retrieveKnowledgeForContext(context, workspaceId) {
   const propertyId = context.signal.propertyId || null;
   const unitId = context.signal.unitId || null;
 
@@ -193,4 +206,16 @@ export async function retrieveKnowledgeForSignal(signalId, workspaceId) {
     model: model || null,
     results: verified.slice(0, TOP_K),
   };
+}
+
+/**
+ * Original Phase 6G entry point, unchanged in behavior: assembles the
+ * Signal's trusted operational context itself, then delegates to
+ * retrieveKnowledgeForContext above. Used by the standalone
+ * GET /:id/knowledge-retrieval development/validation endpoint, which has
+ * only a signalId and no already-assembled context to reuse.
+ */
+export async function retrieveKnowledgeForSignal(signalId, workspaceId) {
+  const context = await assembleSignalContext(signalId, workspaceId);
+  return retrieveKnowledgeForContext(context, workspaceId);
 }

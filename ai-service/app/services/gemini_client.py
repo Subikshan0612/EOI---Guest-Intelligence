@@ -25,7 +25,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.exceptions import MalformedResponseError, ProviderError, ProviderNotConfiguredError
 from app.models.context import SignalContext
-from app.models.intelligence import IntelligenceResponse, Provenance
+from app.models.intelligence import IntelligenceResponse, KnowledgeItem, KnowledgeProvenanceItem, Provenance
 from app.services.prompt_builder import build_intelligence_prompt
 
 logger = logging.getLogger(__name__)
@@ -81,8 +81,24 @@ GEMINI_RESPONSE_SCHEMA = {
             "required": ["expected"],
         },
         "confidence": {"type": "NUMBER"},
+        # Phase 6H — the model's own claim of which supplied KnowledgeItems
+        # it relied on, by chunkId. Never trusted as-is: generate_gemini_
+        # intelligence() below intersects this against the KnowledgeItems
+        # Node actually supplied before building knowledgeProvenance, so a
+        # hallucinated or out-of-scope chunkId can never surface. Empty
+        # array is valid and expected when no supplied knowledge was used.
+        "usedKnowledgeChunkIds": {"type": "ARRAY", "items": {"type": "STRING"}},
     },
-    "required": ["summary", "findings", "risk", "decision", "action", "outcome", "confidence"],
+    "required": [
+        "summary",
+        "findings",
+        "risk",
+        "decision",
+        "action",
+        "outcome",
+        "confidence",
+        "usedKnowledgeChunkIds",
+    ],
 }
 
 
@@ -100,11 +116,54 @@ def _map_provider_error(exc: Exception) -> Exception:
     return ProviderError()
 
 
-def generate_gemini_intelligence(context: SignalContext) -> IntelligenceResponse:
+def _build_knowledge_provenance(
+    used_chunk_ids: object, supplied_knowledge: list[KnowledgeItem]
+) -> list[KnowledgeProvenanceItem]:
+    """
+    Intersects the model's own claimed `usedKnowledgeChunkIds` against the
+    KnowledgeItems Node actually supplied in this request. A chunkId the
+    model invents, misremembers, or copies from outside this request
+    simply has no matching supplied item and is dropped — the model cannot
+    manufacture provenance for a document it wasn't given. Every surviving
+    item's fields are copied from Node's own supplied KnowledgeItem, never
+    from the model's output.
+    """
+    if not isinstance(used_chunk_ids, list):
+        return []
+
+    supplied_by_id = {item.chunkId: item for item in supplied_knowledge}
+    provenance = []
+    seen = set()
+    for claimed_id in used_chunk_ids:
+        if not isinstance(claimed_id, str) or claimed_id in seen:
+            continue
+        item = supplied_by_id.get(claimed_id)
+        if item is None:
+            continue
+        seen.add(claimed_id)
+        provenance.append(
+            KnowledgeProvenanceItem(
+                chunkId=item.chunkId,
+                knowledgeDocumentId=item.knowledgeDocumentId,
+                version=item.version,
+                scope=item.scope,
+                section=item.section,
+                chunkIndex=item.chunkIndex,
+                similarityScore=item.similarityScore,
+                retrievalScore=item.retrievalScore,
+            )
+        )
+    return provenance
+
+
+def generate_gemini_intelligence(
+    context: SignalContext, knowledge: list[KnowledgeItem] | None = None
+) -> IntelligenceResponse:
     if not settings.gemini_api_key:
         raise ProviderNotConfiguredError()
 
-    system_prompt, user_prompt = build_intelligence_prompt(context)
+    knowledge = knowledge or []
+    system_prompt, user_prompt = build_intelligence_prompt(context, knowledge)
 
     # No retries (attempts=1) — matches Node's llmProvider.js exactly, to
     # avoid silently multiplying free-tier API usage on a transient error.
@@ -157,6 +216,10 @@ def generate_gemini_intelligence(context: SignalContext) -> IntelligenceResponse
             # which provider/model was called — never trusted from the
             # model's own JSON output.
             provenance=Provenance(provider="gemini", model=settings.llm_model),
+            # Built by intersecting the model's claim against what Node
+            # actually supplied — never trusted from the model's raw output
+            # directly (see _build_knowledge_provenance's docstring).
+            knowledgeProvenance=_build_knowledge_provenance(raw.get("usedKnowledgeChunkIds"), knowledge),
         )
     except ValidationError:
         raise MalformedResponseError(

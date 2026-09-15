@@ -6,8 +6,9 @@ const REQUEST_TIMEOUT_MS = 20000;
  * Thin HTTP client to the Python AI service. Its only job is to POST a
  * request and translate the service's response — or its failure — into the
  * same safe application errors the OpenAI path in llmProvider.js already
- * produces. Shared by both endpoints this service exposes: intelligence
- * generation (Phase 5) and embedding generation (Phase 6E).
+ * produces. Shared by every endpoint this service exposes: intelligence
+ * generation (Phase 5, knowledge-grounded as of Phase 6H), embedding
+ * generation (Phase 6E), and knowledge retrieval (Phase 6G).
  *
  * This module never assembles operational context, never touches MongoDB,
  * never resolves tenancy, and never contains any provider-specific (Gemini)
@@ -55,14 +56,24 @@ async function postToAiService(path, payload) {
   return body;
 }
 
-export async function requestIntelligenceFromAiService(context) {
-  const body = await postToAiService("/v1/intelligence/signal", { context });
+/**
+ * `knowledge` (Phase 6H, optional, defaults to none) is the exact,
+ * already-tenant-verified result of knowledgeRetrievalService.js's own
+ * MongoDB candidate selection — never arbitrary client-supplied data. See
+ * intelligenceService.js for where retrieval happens and where the
+ * response's `knowledgeProvenance` gets independently re-verified against
+ * that same trusted result before it is ever returned to a caller.
+ */
+export async function requestIntelligenceFromAiService(context, knowledge = []) {
+  const body = await postToAiService("/v1/intelligence/signal", { context, knowledge });
 
   // Python's own provenance is trusted here (unlike a raw LLM's own JSON
   // output): it is Python's honest self-report of which internal path it
   // just executed (its deterministic stub vs. its real Gemini client),
   // attached by Python's own trusted code, not by whatever came back from
   // an external model.
+  // `body.knowledgeProvenance` (Phase 6H) travels inside `raw` — no need to
+  // extract it separately, validateIntelligenceResult reads it from there.
   return { raw: body, provider: body?.provenance?.provider, model: body?.provenance?.model };
 }
 
