@@ -19,6 +19,26 @@ import {
 
 const UPDATABLE = ["actionId", "status", "result", "metrics", "feedback", "occurredAt"];
 
+/**
+ * Phase 7C — an Action attached to an Outcome (at creation or via PATCH)
+ * must actually belong to the SAME Intelligence the Outcome itself
+ * references, not merely the same workspace. Before this phase, only
+ * workspace membership was checked, which allowed an Action belonging to a
+ * different Intelligence in the same workspace to be attached to an
+ * Outcome — the same category of gap Phase 7B found and fixed one layer up
+ * the chain, between Action and Decision.
+ *
+ * Deliberately does NOT check Action.status: Outcome may attach to an
+ * Action in any status (pending/in_progress/completed/cancelled/failed) —
+ * that is an intentional Phase 7C decision, not an oversight.
+ */
+function assertActionUsableForOutcome(action, workspaceId, intelligenceId) {
+  assertSameWorkspace(action, workspaceId, "Action");
+  if (String(action.intelligenceId) !== String(intelligenceId)) {
+    throw new AppError("Action does not belong to the same Intelligence as this Outcome", 400);
+  }
+}
+
 export async function createOutcome(body) {
   requireFields(body, ["workspaceId", "intelligenceId"]);
   const workspaceId = requireObjectId(body.workspaceId, "workspaceId");
@@ -31,7 +51,7 @@ export async function createOutcome(body) {
 
   if (actionId) {
     const action = await findByIdOr404(Action, actionId, "Action");
-    assertSameWorkspace(action, workspaceId, "Action");
+    assertActionUsableForOutcome(action, workspaceId, intelligenceId);
   }
 
   const outcome = await Outcome.create({
@@ -82,7 +102,7 @@ export async function updateOutcome(id, body, workspaceId) {
     updates.actionId = parseObjectId(updates.actionId, "actionId");
     if (updates.actionId) {
       const action = await findByIdOr404(Action, updates.actionId, "Action");
-      assertSameWorkspace(action, outcome.workspaceId, "Action");
+      assertActionUsableForOutcome(action, outcome.workspaceId, outcome.intelligenceId);
     }
   }
 
