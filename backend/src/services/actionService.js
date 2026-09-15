@@ -28,6 +28,42 @@ const UPDATABLE = [
   "result",
 ];
 
+/**
+ * Phase 7B — the existing Action model (Phase 2) already defines its own
+ * status enum (pending/in_progress/completed/cancelled/failed). Before this
+ * phase, PATCH accepted any enum value from any other (the same gap Phase
+ * 7A found and fixed on Decision). This lifecycle reuses the existing enum
+ * unchanged — no new status values.
+ */
+const ACTION_STATUS_TRANSITIONS = {
+  pending: ["in_progress", "cancelled"],
+  in_progress: ["completed", "cancelled", "failed"],
+  completed: [],
+  cancelled: [],
+  failed: [],
+};
+
+/**
+ * Phase 7B — a Decision attached to an Action (at creation or via PATCH)
+ * must actually belong to the SAME Intelligence the Action itself
+ * references, not merely the same workspace. Before this phase, only
+ * workspace membership was checked, which allowed a Decision belonging to a
+ * different Intelligence in the same workspace to be attached to an Action.
+ *
+ * A `rejected` Decision explicitly records that the operation will not
+ * proceed, so an Action must never be attached to one — at creation or via
+ * a later PATCH that reassigns decisionId.
+ */
+function assertDecisionUsableForAction(decision, workspaceId, intelligenceId) {
+  assertSameWorkspace(decision, workspaceId, "Decision");
+  if (String(decision.intelligenceId) !== String(intelligenceId)) {
+    throw new AppError("Decision does not belong to the same Intelligence as this Action", 400);
+  }
+  if (decision.status === "rejected") {
+    throw new AppError("Cannot attach an Action to a rejected Decision", 400);
+  }
+}
+
 export async function createAction(body) {
   requireFields(body, ["workspaceId", "intelligenceId", "description"]);
   const workspaceId = requireObjectId(body.workspaceId, "workspaceId");
@@ -40,7 +76,7 @@ export async function createAction(body) {
 
   if (decisionId) {
     const decision = await findByIdOr404(Decision, decisionId, "Decision");
-    assertSameWorkspace(decision, workspaceId, "Decision");
+    assertDecisionUsableForAction(decision, workspaceId, intelligenceId);
   }
 
   const action = await Action.create({
@@ -94,7 +130,22 @@ export async function updateAction(id, body, workspaceId) {
     updates.decisionId = parseObjectId(updates.decisionId, "decisionId");
     if (updates.decisionId) {
       const decision = await findByIdOr404(Decision, updates.decisionId, "Decision");
-      assertSameWorkspace(decision, action.workspaceId, "Decision");
+      assertDecisionUsableForAction(decision, action.workspaceId, action.intelligenceId);
+    }
+  }
+
+  if (updates.status !== undefined && updates.status !== action.status) {
+    const allowed = ACTION_STATUS_TRANSITIONS[action.status] || [];
+    if (!allowed.includes(updates.status)) {
+      throw new AppError(
+        `Invalid status transition from "${action.status}" to "${updates.status}"`,
+        400,
+      );
+    }
+    // Deterministic, server-set — never trusts a client-supplied completedAt
+    // for the transition that actually completes an Action.
+    if (updates.status === "completed") {
+      updates.completedAt = new Date();
     }
   }
 
