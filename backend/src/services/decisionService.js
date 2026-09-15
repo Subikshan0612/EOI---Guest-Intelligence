@@ -18,6 +18,28 @@ import {
 
 const UPDATABLE = ["type", "description", "priority", "status"];
 
+/**
+ * Phase 7A — the existing Decision model (Phase 2) already defines its own
+ * status enum (proposed/approved/rejected/completed, distinct from the
+ * pending/accepted/rejected/superseded shape sketched in the Phase 7A brief).
+ * Per that brief's own instruction to preserve an existing enum rather than
+ * replace it, this lifecycle is expressed using the existing values only —
+ * "proposed" plays the role of "pending", "completed" plays the role of a
+ * terminal/superseded state. No new status values are introduced.
+ *
+ * Before this phase, PATCH allowed any enum value from any other (Mongoose's
+ * enum only checks the new value is valid, not that the change from the
+ * current value makes sense) — e.g. completed -> proposed was accepted. That
+ * gap is what this phase's "if implementing lifecycle validation, don't
+ * allow arbitrary transitions" instruction is hardening.
+ */
+const DECISION_STATUS_TRANSITIONS = {
+  proposed: ["approved", "rejected", "completed"],
+  approved: ["completed"],
+  rejected: ["completed"],
+  completed: [],
+};
+
 export async function createDecision(body) {
   requireFields(body, ["workspaceId", "intelligenceId", "description"]);
   const workspaceId = requireObjectId(body.workspaceId, "workspaceId");
@@ -67,6 +89,16 @@ export async function updateDecision(id, body, workspaceId) {
 
   if (Object.keys(updates).length === 0) {
     throw new AppError("No valid fields provided for update", 400);
+  }
+
+  if (updates.status !== undefined && updates.status !== decision.status) {
+    const allowed = DECISION_STATUS_TRANSITIONS[decision.status] || [];
+    if (!allowed.includes(updates.status)) {
+      throw new AppError(
+        `Invalid status transition from "${decision.status}" to "${updates.status}"`,
+        400,
+      );
+    }
   }
 
   Object.assign(decision, updates);
