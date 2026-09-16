@@ -46,7 +46,7 @@ export default function PromptInput({
         rows={1}
         value={value}
         autoFocus={autoFocus}
-        placeholder={sending ? "KOI is reviewing the signal..." : placeholder}
+        placeholder={sending ? "EOI is reviewing the signal..." : placeholder}
         disabled={sending}
         aria-disabled={sending}
         onChange={(event) => onChange(event.target.value)}

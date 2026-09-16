@@ -103,7 +103,7 @@ export default function ContextPanel() {
               ))}
             </ul>
           ) : (
-            <p className="muted">Historical stay notes will appear as KOI learns the guest.</p>
+            <p className="muted">Historical stay notes will appear as EOI learns the guest.</p>
           )}
         </section>
       </div>

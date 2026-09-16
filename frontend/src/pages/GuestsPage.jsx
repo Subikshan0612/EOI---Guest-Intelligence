@@ -31,7 +31,7 @@ export default function GuestsPage() {
           <p className="page-kicker">Operations</p>
           <h1 className="page-title">Guests</h1>
           <p className="page-lead">
-            The guests in this workspace, and the stays KOI will eventually resolve signals
+            The guests in this workspace, and the stays EOI will eventually resolve signals
             against.
           </p>
         </div>

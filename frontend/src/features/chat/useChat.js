@@ -78,7 +78,7 @@ export function useChat({ conversationId = null, resetKey = "default" } = {}) {
       } catch (err) {
         if (err?.name === "AbortError") return;
         setError(
-          friendlyError(err, "KOI could not complete this investigation. You can try again."),
+          friendlyError(err, "EOI could not complete this investigation. You can try again."),
         );
       } finally {
         if (!controller.signal.aborted && aliveRef.current) {
@@ -172,7 +172,7 @@ export function useChat({ conversationId = null, resetKey = "default" } = {}) {
       await addMessage(activeId, { role: "user", type: "text", content });
       await completeTurn(activeId, content);
     } catch (err) {
-      setError(friendlyError(err, "KOI could not save your message. Try again."));
+      setError(friendlyError(err, "EOI could not save your message. Try again."));
     } finally {
       sendingRef.current = false;
       if (aliveRef.current) setIsProcessing(false);

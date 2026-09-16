@@ -78,6 +78,45 @@
   color: var(--color-danger);
 }
 
+/* Decision/Action/Outcome status vocabulary (Phase 7A-7D, corrected in
+ * Phase 7E review) — same status-chip primitive, extended rather than
+ * duplicated, but deliberately keeping two vocabularies visually distinct:
+ *
+ * - Decision/Action statuses are WORKFLOW state ("where is this in its
+ *   lifecycle?") — proposed/pending/approved/in_progress/completed all fall
+ *   through to the default accent-soft tone above. A "completed" Action or
+ *   Decision is not given a success-green treatment: finishing a workflow
+ *   is not the same claim as a positive business result, and only Outcome
+ *   ever gets to make that claim. rejected/cancelled/failed are the one
+ *   workflow signal that IS colored (danger) — the workflow item was
+ *   declined, stopped, or didn't complete, independent of any Outcome.
+ * - Outcome statuses are OBSERVED RESULT vocabulary ("what actually
+ *   happened?") — success/partial/failed/unknown are the only place this
+ *   file uses the full success/warning/danger triad for that meaning.
+ *   "unknown" intentionally falls through to the default accent-soft tone,
+ *   the same as an in-progress workflow state, since neither claims a
+ *   result yet.
+ */
+.status-chip[data-tone="rejected"] {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.status-chip[data-tone="success"] {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.status-chip[data-tone="partial"] {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.status-chip[data-tone="failed"] {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
 /* Forms (Property + Unit create/edit) */
 .op-form {
   display: flex;
@@ -487,4 +526,212 @@ a.op-stay-property:hover {
   .intel-flow {
     font-size: var(--font-size-md);
   }
+}
+
+/* Learning (Phase 7E) — reuses .koi-card/.card-label/.status-chip/.muted/
+ * .op-filter-bar/.op-field* throughout; only the layout specific to the
+ * three report layers and the Decision/Action/Outcome breakdown lives here. */
+.learning-page {
+  gap: var(--space-28);
+}
+
+.learning-filter-note {
+  margin-top: calc(-1 * var(--space-16));
+  font-size: var(--font-size-sm);
+}
+
+.learning-subsection-label {
+  margin-top: var(--space-20);
+}
+
+.learning-stat-row {
+  display: flex;
+  gap: var(--space-24);
+  flex-wrap: wrap;
+}
+
+.learning-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.learning-stat-value {
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.learning-stat-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.learning-status-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.learning-status-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.learning-status-count {
+  font-weight: var(--font-weight-semibold);
+}
+
+.learning-coverage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.learning-coverage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding: var(--space-8) 0;
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.learning-coverage-row:first-child {
+  border-top: none;
+}
+
+.learning-coverage-ratio {
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.learning-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+.learning-decision-list,
+.learning-action-list,
+.learning-outcome-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.learning-decision {
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.learning-decision-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-16) var(--space-20);
+  cursor: pointer;
+  list-style: none;
+}
+
+.learning-decision-summary::-webkit-details-marker {
+  display: none;
+}
+
+.learning-decision-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+
+.learning-decision-description {
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.learning-decision-counts {
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.learning-decision-body {
+  padding: 0 var(--space-20) var(--space-20);
+}
+
+.learning-action-row {
+  padding: var(--space-12) var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.learning-action-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+
+.learning-action-description {
+  font-weight: var(--font-weight-medium);
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.learning-action-meta,
+.learning-outcome-meta {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.learning-outcome-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+  margin-top: var(--space-12);
+  padding-top: var(--space-12);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.learning-outcome-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.learning-outcome-copy p {
+  margin: 0;
+}
+
+.learning-empty-branch {
+  margin-top: var(--space-8);
+  font-style: italic;
+}
+
+.learning-orphan-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
 }

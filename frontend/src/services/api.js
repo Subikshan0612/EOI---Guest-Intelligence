@@ -36,6 +36,7 @@ export const koiEndpoints = {
   signalIntelligence: (id) => `/signals/${id}/intelligence`,
   prompts: "/prompts",
   intelligence: "/intelligence",
+  learning: "/learning",
 };
 
 /**
@@ -56,9 +57,9 @@ function toApiError(error) {
     return new ApiError(data?.message || `Request failed (${status})`, status);
   }
   if (error?.code === "ECONNABORTED") {
-    return new ApiError("The KOI backend took too long to respond.", 0);
+    return new ApiError("The EOI backend took too long to respond.", 0);
   }
-  return new ApiError("Cannot reach the KOI backend.", 0);
+  return new ApiError("Cannot reach the EOI backend.", 0);
 }
 
 async function request(promise) {
@@ -284,6 +285,17 @@ export function generateSignalIntelligence(signalId, workspaceId) {
       timeout: 30000,
     }),
   ).then(itemOf);
+}
+
+/* ------------------------------------------------------------------ *
+ * Learning (Phase 7D backend, Phase 7E frontend consumption) — a
+ * read-only, workspace-scoped operational report. There is no create/
+ * update/delete counterpart; this is the only Learning request this
+ * module ever makes.
+ * ------------------------------------------------------------------ */
+
+export function getLearningReport(workspaceId, params = {}) {
+  return request(api.get(koiEndpoints.learning, scoped(workspaceId, params))).then(itemOf);
 }
 
 export default api;

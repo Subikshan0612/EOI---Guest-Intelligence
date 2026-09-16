@@ -89,7 +89,7 @@ export default function SignalIntelligencePage() {
           <p className="page-kicker">Operations · Signal Intelligence</p>
           <h1 className="page-title">{signal.title}</h1>
           <p className="page-lead">
-            What happened, the operational context around it, and what KOI's AI engine makes of it.
+            What happened, the operational context around it, and what EOI's AI engine makes of it.
           </p>
         </div>
       </header>

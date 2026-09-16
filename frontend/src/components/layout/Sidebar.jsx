@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Building2, Plus, Settings, Users, X } from "lucide-react";
+import { Activity, BookOpen, Building2, GitBranch, Plus, Settings, Users, X } from "lucide-react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { groupConversationsByRecency } from "../../features/conversations/conversationSelectors";
 import ConversationItem from "../../features/conversations/ConversationItem";
@@ -22,12 +22,12 @@ export default function Sidebar() {
     <aside
       id="app-sidebar"
       className={sidebarOpen ? "app-sidebar is-open" : "app-sidebar"}
-      aria-label="KOI navigation"
+      aria-label="EOI navigation"
     >
       <div className="sidebar-brand">
         <Link to="/" className="sidebar-brand-copy" onClick={closeOverlays}>
-          <p className="sidebar-brand-title">KOI</p>
-          <p className="sidebar-brand-tagline">Kolam Operational Intelligence</p>
+          <p className="sidebar-brand-title">EOI</p>
+          <p className="sidebar-brand-tagline">Enterprise Operational Intelligence</p>
         </Link>
         <IconButton className="sidebar-close" label="Close navigation" onClick={closeOverlays}>
           <X size={18} strokeWidth={1.75} aria-hidden="true" />
@@ -81,7 +81,7 @@ export default function Sidebar() {
         {!isBackend ? (
           <div className="sidebar-empty" role="note">
             <p>Local mode — conversations are saved in this browser only.</p>
-            <p>Set VITE_KOI_WORKSPACE_ID to persist them to the KOI backend.</p>
+            <p>Set VITE_KOI_WORKSPACE_ID to persist them to the EOI backend.</p>
           </div>
         ) : null}
       </nav>
@@ -104,6 +104,10 @@ export default function Sidebar() {
         <NavLink to="/prompts" className="nav-link" onClick={closeOverlays}>
           <BookOpen size={18} strokeWidth={1.75} aria-hidden="true" />
           Prompt Library
+        </NavLink>
+        <NavLink to="/learning" className="nav-link" onClick={closeOverlays}>
+          <GitBranch size={18} strokeWidth={1.75} aria-hidden="true" />
+          Learning
         </NavLink>
         <p className="nav-label">Workspace</p>
         <NavLink to="/settings" className="nav-link" onClick={closeOverlays}>

@@ -8,7 +8,7 @@ export default function IntelligenceEmptyState({ composer, onSuggestion }) {
     <section className="empty-state" aria-label="New intelligence investigation">
       <div className="empty-state-copy">
         <p className="greeting">{greetingForNow()}</p>
-        <h1 className="page-title">What should KOI investigate?</h1>
+        <h1 className="page-title">What should EOI investigate?</h1>
         <p className="page-lead">
           Understand guest situations, operational issues, and signals — then turn them into
           actionable intelligence.

@@ -103,7 +103,7 @@ export default function ChatWorkspace({ conversationId = null, resetKey = "defau
           <p className="page-kicker">Investigation</p>
           <h1 className="page-title">Couldn’t load this conversation</h1>
           <p className="page-lead">
-            KOI could not reach the backend. Check your connection and try again.
+            EOI could not reach the backend. Check your connection and try again.
           </p>
           <button type="button" className="text-button" onClick={retryLoad}>
             Try again

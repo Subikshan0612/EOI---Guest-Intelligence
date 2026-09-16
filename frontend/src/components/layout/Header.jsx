@@ -30,6 +30,10 @@ const pageMeta = {
     kicker: "Intelligence",
     title: "Prompt library",
   },
+  "/learning": {
+    kicker: "Intelligence",
+    title: "Learning",
+  },
   "/settings": {
     kicker: "Workspace",
     title: "Settings",
@@ -69,7 +73,7 @@ export default function Header() {
     <header className="app-header">
       <div className="header-start">
         <span className="header-brand" aria-hidden="true">
-          <span className="brand-mark">KOI</span>
+          <span className="brand-mark">EOI</span>
         </span>
         <IconButton
           className="menu-toggle"

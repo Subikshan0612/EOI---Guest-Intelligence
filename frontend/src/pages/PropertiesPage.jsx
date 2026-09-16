@@ -31,7 +31,7 @@ export default function PropertiesPage() {
           <p className="page-kicker">Operations</p>
           <h1 className="page-title">Properties</h1>
           <p className="page-lead">
-            The properties in this workspace, and the units KOI will eventually resolve signals
+            The properties in this workspace, and the units EOI will eventually resolve signals
             against.
           </p>
         </div>

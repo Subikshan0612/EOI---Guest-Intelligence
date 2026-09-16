@@ -12,7 +12,7 @@ export default function AssistantMessage({ message }) {
   if (message.type !== "intelligence") {
     return (
       <article className="chat-message chat-message-assistant">
-        <p className="chat-message-kicker">KOI</p>
+        <p className="chat-message-kicker">EOI</p>
         <p className="assistant-summary">{message.content}</p>
       </article>
     );
@@ -25,7 +25,7 @@ export default function AssistantMessage({ message }) {
 
   return (
     <article className="chat-message chat-message-assistant">
-      <p className="chat-message-kicker">KOI</p>
+      <p className="chat-message-kicker">EOI</p>
       {message.intelligence?.summary ? (
         <p className="assistant-summary">{message.intelligence.summary}</p>
       ) : null}
