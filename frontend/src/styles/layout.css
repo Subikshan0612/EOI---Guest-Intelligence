@@ -181,7 +181,14 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0;
+  /* A floor, not 0: without it this section (conversations) was the only
+   * sidebar region with min-height:0, so on short viewports it alone
+   * absorbed the entire shrink deficit — collapsing to a sliver — while
+   * .sidebar-footer below (no min-height override, so its automatic
+   * content-based minimum applied) never shrank at all. Guarantees the
+   * conversation list keeps a couple of visible, scrollable rows even on
+   * very short viewports, instead of disappearing. */
+  min-height: var(--space-64);
   padding: 0 var(--space-8) var(--space-12);
   overflow: auto;
 }
@@ -370,6 +377,15 @@
 }
 
 .sidebar-footer {
+  /* min-height:0 removes the flex item's automatic (content-based) minimum
+   * size, which is what previously forced this section to always render at
+   * its full natural height no matter how little room was left — that was
+   * the actual cause of .sidebar-nav getting squeezed out above. Letting it
+   * shrink and scroll internally means both sections stay reachable on a
+   * short viewport instead of one hiding the other. */
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: var(--space-8) var(--space-8) var(--space-16);
   border-top: var(--border-width) solid var(--color-border);
 }
