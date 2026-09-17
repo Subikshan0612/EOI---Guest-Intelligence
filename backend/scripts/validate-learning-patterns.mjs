@@ -570,6 +570,91 @@ async function main() {
     await expectStatus("23f: invalid type value rejected", "GET", `/learning/patterns?workspaceId=${wsA}&type=not-a-real-type`, null, 400);
     await expectStatus("23g: negative minimumOccurrences rejected", "GET", `/learning/patterns?workspaceId=${wsA}&minimumOccurrences=-1`, null, 400);
     await expectStatus("23h: non-integer minimumDistinctDays rejected", "GET", `/learning/patterns?workspaceId=${wsA}&minimumDistinctDays=1.5`, null, 400);
+    await expectStatus("13: negative minimumDistinctStays rejected", "GET", `/learning/patterns?workspaceId=${wsA}&minimumDistinctStays=-1`, null, 400);
+    await expectStatus("13b: non-integer minimumDistinctStays rejected", "GET", `/learning/patterns?workspaceId=${wsA}&minimumDistinctStays=2.5`, null, 400);
+    await expectStatus("14: negative minimumDistinctGuests rejected", "GET", `/learning/patterns?workspaceId=${wsA}&minimumDistinctGuests=-1`, null, 400);
+    await expectStatus("14b: non-integer minimumDistinctGuests rejected", "GET", `/learning/patterns?workspaceId=${wsA}&minimumDistinctGuests=1.5`, null, 400);
+
+    // === 7F-B: custom thresholds for EACH OR-branch actually take effect (not just minimumOccurrences) ===
+    const strictDays = await expectStatus(
+      "15c: minimumDistinctDays override excludes a pattern that only qualified via days",
+      "GET",
+      `/learning/patterns?workspaceId=${wsA}&propertyId=${propA1}&type=maintenance&minimumDistinctDays=50`,
+      null,
+      200,
+    );
+    if ((strictDays.json?.data?.patterns || []).length === 0) {
+      ok("15c-b: raising minimumDistinctDays above the actual distinct-day count excludes the pattern");
+    } else {
+      fail("15c-b: raising minimumDistinctDays above the actual distinct-day count excludes the pattern", JSON.stringify(strictDays.json?.data?.patterns));
+    }
+
+    const strictStays = await expectStatus(
+      "15d: minimumDistinctStays override excludes a pattern that only qualified via stays",
+      "GET",
+      `/learning/patterns?workspaceId=${wsA}&propertyId=${propA1}&unitId=${unitA1a}&type=housekeeping&minimumOccurrences=1&minimumDistinctDays=50&minimumDistinctStays=50`,
+      null,
+      200,
+    );
+    if ((strictStays.json?.data?.patterns || []).length === 0) {
+      ok("15d-b: raising minimumDistinctStays above the actual distinct-stay count excludes the pattern");
+    } else {
+      fail("15d-b: raising minimumDistinctStays above the actual distinct-stay count excludes the pattern", JSON.stringify(strictStays.json?.data?.patterns));
+    }
+
+    const strictGuests = await expectStatus(
+      "15e: minimumDistinctGuests override excludes a pattern that only qualified via guests",
+      "GET",
+      `/learning/patterns?workspaceId=${wsA}&propertyId=${propA1}&unitId=${unitA1b}&type=payment&minimumOccurrences=1&minimumDistinctDays=50&minimumDistinctStays=50&minimumDistinctGuests=50`,
+      null,
+      200,
+    );
+    if ((strictGuests.json?.data?.patterns || []).length === 0) {
+      ok("15e-b: raising minimumDistinctGuests above the actual distinct-guest count excludes the pattern");
+    } else {
+      fail("15e-b: raising minimumDistinctGuests above the actual distinct-guest count excludes the pattern", JSON.stringify(strictGuests.json?.data?.patterns));
+    }
+
+    // Conversely, confirm a deliberately loose custom threshold set still correctly ADMITS a pattern
+    // (proves the override is genuinely two-way, not just a one-way "always reject" path).
+    const looseGuests = await expectStatus(
+      "15f: a loose custom minimumDistinctGuests still admits a qualifying pattern",
+      "GET",
+      `/learning/patterns?workspaceId=${wsA}&propertyId=${propA1}&unitId=${unitA1b}&type=payment&minimumOccurrences=1&minimumDistinctDays=1&minimumDistinctStays=1&minimumDistinctGuests=2`,
+      null,
+      200,
+    );
+    if (findPattern(looseGuests.json?.data?.patterns, "payment")?.distinctGuestCount === 2) {
+      ok("15f-b: a loose custom threshold set correctly admits the pattern with the expected values");
+    } else {
+      fail("15f-b: a loose custom threshold set correctly admits the pattern", JSON.stringify(looseGuests.json?.data?.patterns));
+    }
+
+    // === 7F-B: empty-string filters must behave as absent, never as a spurious filter ===
+    const emptyStringFilters = await request(
+      "GET",
+      `/learning/patterns?workspaceId=${wsA}&propertyId=&unitId=&type=&from=&to=&minimumOccurrences=&minimumDistinctDays=&minimumDistinctStays=&minimumDistinctGuests=`,
+    );
+    if (emptyStringFilters.status === 200 && JSON.stringify(emptyStringFilters.json?.data) === JSON.stringify(reportA.json?.data)) {
+      ok("empty-string filters produce byte-identical output to omitting the filters entirely");
+    } else {
+      fail("empty-string filters produce byte-identical output to omitting the filters entirely", `status=${emptyStringFilters.status}`);
+    }
+
+    // === 7F-B: unknown/extra query parameters must never alter behavior ===
+    const unknownParams = await request("GET", `/learning/patterns?workspaceId=${wsA}&foo=bar&unexpectedFlag=true&randomExtra=123`);
+    if (unknownParams.status === 200 && JSON.stringify(unknownParams.json?.data) === JSON.stringify(reportA.json?.data)) {
+      ok("unknown/extra query parameters do not alter the response");
+    } else {
+      fail("unknown/extra query parameters do not alter the response", `status=${unknownParams.status}: ${JSON.stringify(unknownParams.json)}`);
+    }
+
+    // === 7F-B: linkedIntelligenceIds ordering is deterministic ===
+    if (Array.isArray(maintenancePattern?.linkedIntelligenceIds) && isSorted(maintenancePattern.linkedIntelligenceIds)) {
+      ok("linkedIntelligenceIds is deterministically sorted");
+    } else {
+      fail("linkedIntelligenceIds is deterministically sorted", JSON.stringify(maintenancePattern?.linkedIntelligenceIds));
+    }
 
     // === 24: existing Learning API regression (untouched) ===
     const learningReportCheck = await expectStatus("24: existing GET /api/learning still works unaffected", "GET", `/learning?workspaceId=${wsA}`, null, 200);

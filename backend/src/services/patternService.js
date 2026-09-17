@@ -277,6 +277,10 @@ export async function getRecurringSignalPatterns(query = {}) {
     });
   }
 
+  // No tie-breaker is needed here beyond `category`: this array is built
+  // from `groups`, one entry per distinct `$group: { _id: "$type" }` bucket,
+  // so `category` is already guaranteed unique across every pattern in a
+  // single response — two patterns can never share a sort key.
   patterns.sort((a, b) => (a.category < b.category ? -1 : a.category > b.category ? 1 : 0));
 
   return {
