@@ -85,6 +85,123 @@ function sha256Hex(text) {
 }
 
 /**
+ * Phase 7F-D3 — hand-built, minimal, single-page, single-line PDF byte
+ * sequences for testing the real pdf-parse extraction path with no
+ * external PDF files, no network fetches, and no extra dependency beyond
+ * the one approved (pdf-parse itself). Byte offsets in the xref table are
+ * computed from the actual bytes written, not hand-typed, so this stays
+ * correct regardless of how long `text` is (within the single-line width
+ * limit — see buildMultilinePdf below for genuinely long content).
+ *
+ * MediaBox is deliberately wide (4000pt) rather than a "normal" page
+ * width: pdf.js's text extraction clips a single unwrapped `Tj` line at
+ * the page's visible width (verified directly against the installed
+ * library — at a normal ~300pt page width, even a ~40-character line was
+ * silently truncated to ~36 characters). A real PDF generator would never
+ * emit one giant unwrapped line either, but this function intentionally
+ * does, for simplicity — so it needs the wide page to stay correct for
+ * every test string used against it, not just very short ones.
+ */
+function buildMinimalPdf(text) {
+  const escaped = text.replace(/([()\\])/g, "\\$1");
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 4000 200] /Contents 5 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+  ];
+  const streamContent = text.length > 0 ? `BT /F1 14 Tf 20 150 Td (${escaped}) Tj ET` : "BT ET";
+  objects.push(
+    `5 0 obj\n<< /Length ${Buffer.byteLength(streamContent, "utf8")} >>\nstream\n${streamContent}\nendstream\nendobj\n`,
+  );
+  return finishPdf(objects);
+}
+
+/**
+ * Same idea, but wraps `text` across many lines (a tall single page, one
+ * `Tj` per line) — real pdf.js text extraction clips a single unwrapped
+ * `Tj` line at the page's visible width (verified directly against the
+ * installed library before writing this: a 500,000-character single-line
+ * PDF only extracted ~36 characters at a normal page width), exactly like
+ * a real PDF generator would never emit one giant unwrapped line either.
+ * Used for the extracted-text-ceiling test, where genuinely large
+ * extracted text is the point.
+ */
+function buildMultilinePdf(text, lineWidth = 80) {
+  const lines = [];
+  for (let i = 0; i < text.length; i += lineWidth) lines.push(text.slice(i, i + lineWidth));
+  const escapedLines = lines.map((line) => line.replace(/([()\\])/g, "\\$1"));
+  const pageWidth = 700;
+  const pageHeight = (lines.length + 5) * 14 + 100;
+
+  let streamContent = `BT /F1 12 Tf 20 ${pageHeight - 30} Td\n`;
+  for (const line of escapedLines) streamContent += `(${line}) Tj 0 -14 Td\n`;
+  streamContent += "ET";
+
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents 5 0 R >>\nendobj\n`,
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+  ];
+  objects.push(
+    `5 0 obj\n<< /Length ${Buffer.byteLength(streamContent, "utf8")} >>\nstream\n${streamContent}\nendstream\nendobj\n`,
+  );
+  return finishPdf(objects);
+}
+
+/** Shared xref/trailer builder for both PDF generators above. */
+function finishPdf(objects) {
+  const header = "%PDF-1.4\n";
+  let body = header;
+  const offsets = [0];
+  for (const obj of objects) {
+    offsets.push(Buffer.byteLength(body, "utf8"));
+    body += obj;
+  }
+  const xrefOffset = Buffer.byteLength(body, "utf8");
+  let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= objects.length; i += 1) {
+    xref += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  }
+  const trailer = `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(body + xref + trailer, "utf8");
+}
+
+/**
+ * A minimal, single-page PDF whose trailer references an /Encrypt
+ * dictionary with deliberately-invalid O/U password hashes — enough for
+ * pdf.js to detect the document requires a password and throw
+ * PasswordException, without needing to implement real RC4/AES PDF
+ * encryption (verified directly against the installed library: this does
+ * genuinely trigger PasswordException, not a generic parse failure).
+ */
+function buildEncryptedPdf() {
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 300 200] /Contents 5 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    "5 0 obj\n<< /Length 10 >>\nstream\nBT ET\nendstream\nendobj\n",
+    "6 0 obj\n<< /Filter /Standard /V 1 /R 2 /O (\\376\\377\\376\\377\\376\\377\\376\\377\\376\\377\\376\\377\\376\\377\\376) /U (\\376\\377\\376\\377\\376\\377\\376\\377\\376\\377\\376\\377\\376\\377\\376) /P -44 >>\nendobj\n",
+  ];
+  const header = "%PDF-1.4\n";
+  let body = header;
+  const offsets = [0];
+  for (const obj of objects) {
+    offsets.push(Buffer.byteLength(body, "utf8"));
+    body += obj;
+  }
+  const xrefOffset = Buffer.byteLength(body, "utf8");
+  let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= objects.length; i += 1) {
+    xref += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  }
+  const trailer = `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Encrypt 6 0 R /ID [(1234567890123456) (1234567890123456)] >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(body + xref + trailer, "utf8");
+}
+
+/**
  * Real multipart/form-data upload — the actual transport this endpoint
  * uses, not the JSON `request()` helper above. `fileBytes` may be a string
  * (encoded as UTF-8) or a Uint8Array (for the invalid-UTF-8 test, which
@@ -643,6 +760,243 @@ async function main() {
       fail("7FD2-followup: the failed upload's error response carries the already-created document's id in `details`", JSON.stringify(failedUploadRes.json));
     }
   });
+
+  // =========================================================
+  // Phase 7F-D3: PDF ingestion. Reuses the exact same upload endpoint,
+  // metadata behavior, duplicate detection, supersession, ingestion-status
+  // machinery, and retrieval/RAG pipeline every TXT/Markdown test above
+  // already exercises — this section only proves the new PDF-specific
+  // extraction path (documentExtractor.js's extractPdfText) behaves
+  // correctly, and that nothing else needed to change.
+  // =========================================================
+
+  // --- 1: valid text PDF ---
+  const pdfContent = `Example only. PDF upload content ${stamp}.`;
+  const validPdfRes = await expectUploadStatus(
+    "7FD3.1: valid text PDF upload succeeds",
+    { fields: { workspaceId: wsA, title: "Example: Valid PDF", documentType: "sop", isTestData: "true" }, fileBytes: buildMinimalPdf(pdfContent), filename: "valid.pdf" },
+    201,
+  );
+  const validPdfId = trackCreated(validPdfRes, "knowledgeDocumentIds");
+  if (validPdfRes.json?.data?.sourceType === "pdf-upload") ok("7FD3.1: sourceType is pdf-upload");
+  else fail("7FD3.1: sourceType is pdf-upload", JSON.stringify(validPdfRes.json?.data));
+  if (typeof validPdfRes.json?.data?.content === "string" && validPdfRes.json.data.content.includes(pdfContent)) {
+    ok("7FD3.1: extracted content is non-empty and contains the expected text");
+  } else {
+    fail("7FD3.1: extracted content is non-empty and contains the expected text", JSON.stringify(validPdfRes.json?.data?.content));
+  }
+  // The upload response's own `data` is a snapshot taken at create time,
+  // before chunk/embed run (same pre-existing characteristic the D2/D2-
+  // followup tests above already work around by re-fetching) — so the
+  // *final* ingestionStatus is checked via a fresh GET, not the POST response.
+  const validPdfAfter = await request("GET", `/knowledge-documents/${validPdfId}?workspaceId=${wsA}`);
+  if (validPdfAfter.json?.data?.ingestionStatus === "ready") ok("7FD3.1: document reaches ingestionStatus:ready (embedding already ran synchronously)");
+  else fail("7FD3.1: document reaches ingestionStatus:ready", JSON.stringify(validPdfAfter.json?.data));
+  // Verify through the actual persisted chunks, not just the HTTP response.
+  const validPdfChunks = await request("GET", `/knowledge-documents/${validPdfId}/chunks?workspaceId=${wsA}`);
+  const validPdfChunkRows = validPdfChunks.json?.data || [];
+  if (validPdfChunkRows.length > 0 && validPdfChunkRows.every((c) => c.text.includes(pdfContent.split(".")[0]) || c.text.length > 0) && validPdfChunkRows.every((c) => Array.isArray(c.embedding) && c.embedding.length > 0)) {
+    ok("7FD3.1: the persisted KnowledgeChunk rows contain real extracted text and are fully embedded");
+  } else {
+    fail("7FD3.1: the persisted KnowledgeChunk rows contain real extracted text and are fully embedded", JSON.stringify(validPdfChunkRows));
+  }
+
+  // --- 2: malformed PDF ---
+  const malformedRes = await expectUploadStatus(
+    "7FD3.2: malformed PDF (.pdf extension, invalid bytes) rejected",
+    { fields: { workspaceId: wsA, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: "this is not a pdf at all, just garbage bytes pretending to be one", filename: "malformed.pdf" },
+    400,
+  );
+  if (malformedRes.status !== 500) ok("7FD3.2: malformed PDF never returns 500");
+  else fail("7FD3.2: malformed PDF never returns 500");
+
+  // --- 3: encrypted/password-protected PDF ---
+  const encryptedRes = await expectUploadStatus(
+    "7FD3.3: encrypted/password-protected PDF rejected",
+    { fields: { workspaceId: wsA, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: buildEncryptedPdf(), filename: "encrypted.pdf" },
+    400,
+  );
+  const encryptedMessage = JSON.stringify(encryptedRes.json);
+  const secretPattern = /node_modules|at\s+\S+\.(js|cjs|mjs):\d+|Authorization:\s*Bearer|[A-Za-z]:\\Users|\/home\//i;
+  if (!secretPattern.test(encryptedMessage)) ok("7FD3.3: encrypted-PDF error response exposes no stack trace, file path, or internal detail");
+  else fail("7FD3.3: encrypted-PDF error response exposes no internal detail", encryptedMessage);
+
+  // --- 4/5: image-only/scanned PDF and empty/no-extractable-text PDF —
+  // both produce empty extracted text and are rejected through the
+  // EXISTING content validation path (assertNonBlankContent inside
+  // createKnowledgeDocument), not a new PDF-specific empty check. A
+  // blank-page PDF (no text-drawing operators at all) is the closest
+  // deterministic stand-in for "image-only" achievable without a real
+  // scanned-image PDF fixture or OCR (explicitly out of scope).
+  // =========================================================
+  const blankPdfRes = await expectUploadStatus(
+    "7FD3.4/5: image-only/empty PDF (no extractable text) rejected via the existing content validation path",
+    { fields: { workspaceId: wsA, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: buildMinimalPdf(""), filename: "blank.pdf" },
+    400,
+  );
+  if (typeof blankPdfRes.json?.message === "string" && blankPdfRes.json.message.includes("content is required")) {
+    ok("7FD3.4/5: rejected with the exact same message an empty TXT upload already gets — no new/duplicate validation logic");
+  } else {
+    fail("7FD3.4/5: rejected with the exact same message an empty TXT upload already gets", JSON.stringify(blankPdfRes.json));
+  }
+
+  // --- 6: PDF under 10 MB with valid text succeeds (already proven by #1;
+  // explicit check that a moderately larger, still well-under-10MB PDF
+  // also succeeds) ---
+  const moderatePdfRes = await expectUploadStatus(
+    "7FD3.6: a larger (still well under 10 MB) PDF with valid text succeeds",
+    { fields: { workspaceId: wsA, title: "Example: Moderate PDF", documentType: "guideline", isTestData: "true" }, fileBytes: buildMultilinePdf(`Example only. Moderate PDF content ${stamp}. `.repeat(200)), filename: "moderate.pdf" },
+    201,
+  );
+  trackCreated(moderatePdfRes, "knowledgeDocumentIds");
+
+  // --- 7: unsupported extension still rejected (regression: adding .pdf
+  // support did not loosen the extension allow-list) ---
+  await expectUploadStatus(
+    "7FD3.7: unsupported extension (.doc) still rejected",
+    { fields: { workspaceId: wsA, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: "irrelevant", filename: "document.doc" },
+    400,
+  );
+
+  // --- 8: duplicate PDF content -> 409 (reusing D1's constraint, isTestData:false only) ---
+  const pdfDupContent = `Example only. PDF duplicate check ${stamp}.`;
+  const pdfDupFirstRes = await expectUploadStatus(
+    "7FD3.8: first real PDF upload with this content succeeds",
+    { fields: { workspaceId: wsA, title: "Example: PDF dup source", documentType: "policy", isTestData: "false" }, fileBytes: buildMinimalPdf(pdfDupContent), filename: "pdf-dup-1.pdf" },
+    201,
+  );
+  const pdfDupFirstId = trackCreated(pdfDupFirstRes, "knowledgeDocumentIds");
+  await expectUploadStatus(
+    "7FD3.8: identical PDF content, same workspace/scope -> 409 duplicate",
+    { fields: { workspaceId: wsA, title: "Example: PDF dup attempt", documentType: "policy", isTestData: "false" }, fileBytes: buildMinimalPdf(pdfDupContent), filename: "pdf-dup-2.pdf" },
+    409,
+  );
+
+  // --- 9: cross-format duplicate — PDF extracted text identical to an
+  // existing TXT document's content -> 409, proving contentHash is
+  // computed from canonical extracted content, not file identity/format. ---
+  const crossFormatContent = `Example only. Cross-format duplicate check ${stamp}.`;
+  const txtSourceRes = await expectUploadStatus(
+    "7FD3.9: TXT upload establishing the cross-format duplicate source",
+    { fields: { workspaceId: wsA, title: "Example: TXT dup source", documentType: "policy", isTestData: "false" }, fileBytes: crossFormatContent, filename: "cross-format.txt" },
+    201,
+  );
+  const txtSourceId = trackCreated(txtSourceRes, "knowledgeDocumentIds");
+  await expectUploadStatus(
+    "7FD3.9: PDF whose extracted text matches an existing TXT document's content -> 409 duplicate",
+    { fields: { workspaceId: wsA, title: "Example: PDF cross-format dup attempt", documentType: "policy", isTestData: "false" }, fileBytes: buildMinimalPdf(crossFormatContent), filename: "cross-format.pdf" },
+    409,
+  );
+
+  // clean up the two isTestData:false active duplicate sources above so
+  // they don't collide with anything else this suite creates later.
+  await connectDatabase();
+  await KnowledgeDocument.deleteMany({ _id: { $in: [pdfDupFirstId, txtSourceId] } });
+  await disconnectDatabase();
+
+  // --- 10: PDF extraction followed by a genuine embedding failure ---
+  await withEphemeralServer(5098, { AI_SERVICE_URL: "http://localhost:5999" }, async (ephemeralBase) => {
+    const pdfFailRes = await upload({
+      baseUrl: ephemeralBase,
+      fields: { workspaceId: wsA, title: "Example: PDF with forced ingestion failure", documentType: "guideline", isTestData: "true" },
+      fileBytes: buildMinimalPdf(`Example only. PDF ingestion failure check ${stamp}.`),
+      filename: "pdf-forced-failure.pdf",
+    });
+    if (pdfFailRes.status === 502) ok("7FD3.10: a PDF upload whose embedding step genuinely fails still returns the existing 502 behavior, unchanged");
+    else fail("7FD3.10: a PDF upload whose embedding step genuinely fails still returns the existing 502 behavior", `status=${pdfFailRes.status}`);
+
+    const pdfFailedId = pdfFailRes.json?.details?.knowledgeDocumentId;
+    if (typeof pdfFailedId === "string" && pdfFailedId.length === 24) {
+      ok("7FD3.10: the failed PDF upload's error response carries the already-created document's id in `details`");
+      trackCreated({ json: { data: { _id: pdfFailedId } } }, "knowledgeDocumentIds");
+
+      await connectDatabase();
+      const pdfFailedDoc = await KnowledgeDocument.findById(pdfFailedId);
+      await disconnectDatabase();
+      if (pdfFailedDoc?.ingestionStatus === "failed" && typeof pdfFailedDoc?.ingestionError === "string" && !secretPattern.test(pdfFailedDoc.ingestionError)) {
+        ok("7FD3.10: the document is independently observable as ingestionStatus:failed with a safe ingestionError");
+      } else {
+        fail("7FD3.10: the document is independently observable as ingestionStatus:failed with a safe ingestionError", JSON.stringify({ status: pdfFailedDoc?.ingestionStatus, error: pdfFailedDoc?.ingestionError }));
+      }
+
+      // existing retry flow (against the real, working backend) recovers it
+      await expectStatus("7FD3.10: retry — re-chunk the failed PDF document", "POST", `/knowledge-documents/${pdfFailedId}/chunks?workspaceId=${wsA}`, null, 201);
+      await expectStatus("7FD3.10: retry — re-embed the failed PDF document", "POST", `/knowledge-documents/${pdfFailedId}/embeddings?workspaceId=${wsA}`, null, 201);
+      const pdfRecovered = await request("GET", `/knowledge-documents/${pdfFailedId}?workspaceId=${wsA}`);
+      if (pdfRecovered.json?.data?.ingestionStatus === "ready") ok("7FD3.10: the existing chunk/embed retry endpoints recover a failed PDF document to ready, same as TXT/MD");
+      else fail("7FD3.10: the existing chunk/embed retry endpoints recover a failed PDF document to ready", JSON.stringify(pdfRecovered.json?.data));
+    } else {
+      fail("7FD3.10: the failed PDF upload's error response carries the already-created document's id in `details`", JSON.stringify(pdfFailRes.json));
+    }
+  });
+
+  // --- 11: spoofed MIME type on a valid PDF still works (extension governs) ---
+  const spoofedMimeRes = await expectUploadStatus(
+    "7FD3.11: a valid PDF with an arbitrary/wrong MIME type still works",
+    { fields: { workspaceId: wsA, title: "Example: PDF spoofed MIME", documentType: "guideline", isTestData: "true" }, fileBytes: buildMinimalPdf(`Example only. Spoofed MIME PDF check ${stamp}.`), filename: "spoofed-mime.pdf", mimeType: "application/octet-stream" },
+    201,
+  );
+  trackCreated(spoofedMimeRes, "knowledgeDocumentIds");
+  if (spoofedMimeRes.json?.data?.sourceType === "pdf-upload") ok("7FD3.11: sourceType remains pdf-upload regardless of the client-supplied MIME type");
+  else fail("7FD3.11: sourceType remains pdf-upload regardless of the client-supplied MIME type", JSON.stringify(spoofedMimeRes.json?.data));
+
+  // --- 12: fake PDF — .pdf extension, content is not PDF bytes at all ---
+  await expectUploadStatus(
+    "7FD3.12: a .pdf-named file whose content is not a real PDF is rejected with 400",
+    { fields: { workspaceId: wsA, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: "Just plain text content, not a PDF structure whatsoever.", filename: "fake.pdf", mimeType: "application/pdf" },
+    400,
+  );
+
+  // --- 13: extracted-text ceiling ---
+  await connectDatabase();
+  const beforeCeilingCount = await KnowledgeDocument.countDocuments({ workspaceId: wsA });
+  await disconnectDatabase();
+  const overCeilingRes = await expectUploadStatus(
+    "7FD3.13: a PDF whose extracted text exceeds the configured ceiling is rejected",
+    { fields: { workspaceId: wsA, title: "Example: Over-ceiling PDF", documentType: "guideline", isTestData: "true" }, fileBytes: buildMultilinePdf("a".repeat(500_001)), filename: "over-ceiling.pdf" },
+    400,
+  );
+  if (typeof overCeilingRes.json?.message === "string" && overCeilingRes.json.message.includes("exceeds the maximum supported length")) {
+    ok("7FD3.13: the ceiling rejection carries a clear, specific message");
+  } else {
+    fail("7FD3.13: the ceiling rejection carries a clear, specific message", JSON.stringify(overCeilingRes.json));
+  }
+  await connectDatabase();
+  const afterCeilingCount = await KnowledgeDocument.countDocuments({ workspaceId: wsA });
+  await disconnectDatabase();
+  if (afterCeilingCount === beforeCeilingCount) ok("7FD3.13: no partial KnowledgeDocument was created when the ceiling was exceeded");
+  else fail("7FD3.13: no partial KnowledgeDocument was created when the ceiling was exceeded", `before=${beforeCeilingCount} after=${afterCeilingCount}`);
+
+  // Sanity: content comfortably under the ceiling still succeeds (proves
+  // this is a real ceiling, not an accidentally-always-failing check).
+  const underCeilingRes = await expectUploadStatus(
+    "7FD3.13b: a PDF whose extracted text is comfortably under the ceiling succeeds",
+    { fields: { workspaceId: wsA, title: "Example: Under-ceiling PDF", documentType: "guideline", isTestData: "true" }, fileBytes: buildMultilinePdf("b".repeat(400_000)), filename: "under-ceiling.pdf" },
+    201,
+  );
+  trackCreated(underCeilingRes, "knowledgeDocumentIds");
+
+  // --- 14: regression — TXT and Markdown uploads still behave exactly as
+  // before adding PDF support (sections 1-34 above, run unmodified in the
+  // same suite, already prove this; this is one additional explicit
+  // smoke check specifically placed after the PDF work). ---
+  const txtRegressionRes = await expectUploadStatus(
+    "7FD3.14: TXT upload still works unchanged after PDF support was added",
+    { fields: { workspaceId: wsA, title: "Example: TXT still works", documentType: "guideline", isTestData: "true" }, fileBytes: `Example only. TXT regression check ${stamp}.`, filename: "regression.txt" },
+    201,
+  );
+  trackCreated(txtRegressionRes, "knowledgeDocumentIds");
+  if (txtRegressionRes.json?.data?.sourceType === "txt-upload") ok("7FD3.14: TXT sourceType unaffected");
+  else fail("7FD3.14: TXT sourceType unaffected", JSON.stringify(txtRegressionRes.json?.data));
+
+  const mdRegressionRes = await expectUploadStatus(
+    "7FD3.14: Markdown upload still works unchanged after PDF support was added",
+    { fields: { workspaceId: wsA, title: "Example: MD still works", documentType: "guideline", isTestData: "true" }, fileBytes: `# Example ${stamp}\n\nStill works.`, filename: "regression.md" },
+    201,
+  );
+  trackCreated(mdRegressionRes, "knowledgeDocumentIds");
+  if (mdRegressionRes.json?.data?.sourceType === "md-upload") ok("7FD3.14: Markdown sourceType unaffected");
+  else fail("7FD3.14: Markdown sourceType unaffected", JSON.stringify(mdRegressionRes.json?.data));
 
   await cleanup();
   ok("mongodb cleanup");

@@ -37,7 +37,11 @@ export const uploadKnowledgeDocument = asyncHandler(async (req, res) => {
     throw new AppError("A file is required", 400);
   }
 
-  const { text, sourceType } = extractDocumentText({
+  // Phase 7F-D3: extractDocumentText is now async (PDF parsing is
+  // inherently asynchronous) — the one necessary change to this file for
+  // PDF support; TXT/Markdown handling inside the extractor itself is
+  // completely unchanged.
+  const { text, sourceType } = await extractDocumentText({
     originalName: req.file.originalname,
     buffer: req.file.buffer,
   });
