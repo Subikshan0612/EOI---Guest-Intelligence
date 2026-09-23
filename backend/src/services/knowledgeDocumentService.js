@@ -102,7 +102,7 @@ function assertValidBoolean(value, fieldName) {
  * existing `content` field's own comment). Same input always produces the
  * same hash; never accepted from a caller, always computed here.
  */
-function computeContentHash(content) {
+export function computeContentHash(content) {
   return createHash("sha256").update(content, "utf8").digest("hex");
 }
 
@@ -260,6 +260,9 @@ export async function listKnowledgeDocuments(query) {
   if (query.unitId) filter.unitId = parseObjectId(query.unitId, "unitId");
   if (query.documentType) filter.documentType = query.documentType;
   if (query.status) filter.status = query.status;
+  // Phase 7F-D2 follow-up — lets a failed/half-ingested document be found
+  // (e.g. GET ?ingestionStatus=failed) without a direct MongoDB query.
+  if (query.ingestionStatus) filter.ingestionStatus = query.ingestionStatus;
 
   return paginateQuery(KnowledgeDocument, filter, pagination, sort);
 }

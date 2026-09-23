@@ -377,6 +377,42 @@ async function main() {
     fail("6G.21: empty candidate set returns an empty result list, not an error", JSON.stringify(emptyRes.json));
   }
 
+  // =========================================================
+  // 22: Phase 7F-D2 follow-up — a chunk without an embedding is excluded
+  // from retrieval candidates entirely. This behavior already existed
+  // (selectCandidateChunks's own embedding:{$exists:true,$ne:null} filter
+  // — unchanged by the ingestionStatus work), but is now explicitly
+  // proven here: chunk the document WITHOUT ever calling the embed step.
+  // =========================================================
+  const unembeddedDocRes = await expectStatus(
+    "7FD2-followup: create a document for the un-embedded-chunk check",
+    "POST",
+    "/knowledge-documents",
+    { workspaceId: wsA, title: "Example: Never embedded", documentType: "guideline", content: QUERY_TEXT, isTestData: true },
+    201,
+  );
+  const unembeddedDocId = trackCreated(unembeddedDocRes, "knowledgeDocumentIds");
+  await expectStatus(
+    "7FD2-followup: chunk it (deliberately never embedded)",
+    "POST",
+    `/knowledge-documents/${unembeddedDocId}/chunks?workspaceId=${wsA}`,
+    null,
+    201,
+  );
+  if (unembeddedDocRes.json?.data?.ingestionStatus === "pending") {
+    ok("7FD2-followup: the un-embedded document correctly remains ingestionStatus:pending");
+  } else {
+    fail("7FD2-followup: the un-embedded document correctly remains ingestionStatus:pending", JSON.stringify(unembeddedDocRes.json?.data));
+  }
+  const unembeddedSignal = await createSignal({ workspaceId: wsA, type: "maintenance", title: "AC not cooling", description: "Warm air blowing from the unit." });
+  const unembeddedRes = await request("GET", `/signals/${unembeddedSignal}/knowledge-retrieval?workspaceId=${wsA}`);
+  const unembeddedDocIds = (unembeddedRes.json?.data?.results || []).map((r) => r.knowledgeDocumentId);
+  if (!unembeddedDocIds.includes(unembeddedDocId)) {
+    ok("7FD2-followup: retrieval still ignores a chunk that has no embedding, unchanged");
+  } else {
+    fail("7FD2-followup: retrieval still ignores a chunk that has no embedding, unchanged", JSON.stringify(unembeddedDocIds));
+  }
+
   // === Tenant isolation on the endpoint itself ===
   await expectStatus("6G: cross-workspace signal returns 404", "GET", `/signals/${signalFull}/knowledge-retrieval?workspaceId=${wsB}`, null, 404);
   await expectStatus("6G: missing workspaceId returns 400", "GET", `/signals/${signalFull}/knowledge-retrieval`, null, 400);

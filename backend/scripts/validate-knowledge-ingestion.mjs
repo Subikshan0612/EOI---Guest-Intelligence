@@ -16,8 +16,14 @@
  * embedding.mjs already does) — started with EMBEDDING_PROVIDER=test.
  */
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
 import { Workspace, Property, Unit, KnowledgeDocument, KnowledgeChunk } from "../src/models/index.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SERVER_ENTRY = path.join(__dirname, "..", "server.js");
 
 const BASE = process.env.API_BASE || "http://localhost:5002/api";
 const PYTHON_BASE = process.env.PYTHON_BASE || "http://localhost:8000";
@@ -72,6 +78,56 @@ function trackCreated(result, bucket) {
 
 function sha256Hex(text) {
   return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+/**
+ * Phase 7F-D2 follow-up — same pattern validate-ai-service.mjs's "5.6" and
+ * validate-knowledge-grounding.mjs's "6H.2b" already use: a throwaway
+ * `node server.js` with a deliberately broken AI_SERVICE_URL, reading the
+ * same MongoDB as the main test server. The deterministic test embedding
+ * provider itself has no failure mode for any input (it's a pure hash
+ * function), so this — a genuine, unmocked Node->Python connection
+ * failure — is the only way to exercise a real embedding failure without
+ * touching real provider config.
+ */
+function waitForHealth(base, timeoutMs = 15000) {
+  const start = Date.now();
+  return new Promise((resolve, reject) => {
+    const attempt = async () => {
+      try {
+        const res = await fetch(`${base}/health`);
+        if (res.ok) {
+          resolve();
+          return;
+        }
+      } catch {
+        // not ready yet
+      }
+      if (Date.now() - start > timeoutMs) {
+        reject(new Error(`Server at ${base} did not become healthy in time`));
+        return;
+      }
+      setTimeout(attempt, 200);
+    };
+    attempt();
+  });
+}
+
+async function withEphemeralServer(port, envOverrides, fn) {
+  const child = spawn(process.execPath, [SERVER_ENTRY], {
+    env: { ...process.env, PORT: String(port), ...envOverrides },
+    stdio: "ignore",
+  });
+
+  const base = `http://localhost:${port}/api`;
+  try {
+    await waitForHealth(base);
+    await fn(base);
+  } finally {
+    child.kill();
+    await new Promise((resolve) => child.once("exit", resolve));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
 }
 
 async function cleanup() {
@@ -483,6 +539,94 @@ async function main() {
   const allEmbedded = (chunksRes.json?.data || []).length > 0 && (chunksRes.json.data).every((c) => Array.isArray(c.embedding) && c.embedding.length > 0);
   if (allEmbedded) ok("7FD1.15: chunking + embedding still work end-to-end on a 7F-D1-created document");
   else fail("7FD1.15: chunking + embedding still work end-to-end on a 7F-D1-created document", JSON.stringify({ embedRes: embedRes.json, chunksRes: chunksRes.json }));
+
+  // =========================================================
+  // 16: ingestion processing state (pending/ready/failed) — Phase 7F-D2
+  // follow-up. Orthogonal to the status (active/superseded/archived)
+  // tests in sections 8-13 above — those all still passed unmodified,
+  // proving ingestionStatus doesn't interfere with the existing lifecycle.
+  // =========================================================
+  const freshDocRes = await expectStatus(
+    "7FD1.16: create a fresh document for ingestion-status checks",
+    "POST",
+    "/knowledge-documents",
+    { workspaceId: wsA, title: "Example: Ingestion status check", documentType: "guideline", content: `Example only. Ingestion status check ${stamp}.`, isTestData: true },
+    201,
+  );
+  const freshDocId = trackCreated(freshDocRes, "knowledgeDocumentIds");
+  if (freshDocRes.json?.data?.ingestionStatus === "pending") ok("7FD1.16a: a newly created document starts ingestionStatus:pending");
+  else fail("7FD1.16a: a newly created document starts ingestionStatus:pending", JSON.stringify(freshDocRes.json?.data));
+  if (freshDocRes.json?.data?.ingestionError === undefined) ok("7FD1.16a: a newly created document has no ingestionError");
+  else fail("7FD1.16a: a newly created document has no ingestionError", JSON.stringify(freshDocRes.json?.data));
+
+  await expectStatus("7FD1.16: chunk the fresh document", "POST", `/knowledge-documents/${freshDocId}/chunks?workspaceId=${wsA}`, null, 201);
+  await expectStatus("7FD1.16: embed the fresh document", "POST", `/knowledge-documents/${freshDocId}/embeddings?workspaceId=${wsA}`, null, 201);
+  const readyDoc = await request("GET", `/knowledge-documents/${freshDocId}?workspaceId=${wsA}`);
+  if (readyDoc.json?.data?.ingestionStatus === "ready") ok("7FD1.16b: successful embedding changes ingestionStatus pending -> ready");
+  else fail("7FD1.16b: successful embedding changes ingestionStatus pending -> ready", JSON.stringify(readyDoc.json?.data));
+  if (readyDoc.json?.data?.ingestionError === undefined) ok("7FD1.16b: ingestionError remains absent after a successful embed");
+  else fail("7FD1.16b: ingestionError remains absent after a successful embed", JSON.stringify(readyDoc.json?.data));
+
+  const failDocRes = await expectStatus(
+    "7FD1.16: create a document to force a genuine embedding failure on",
+    "POST",
+    "/knowledge-documents",
+    { workspaceId: wsA, title: "Example: Ingestion failure check", documentType: "guideline", content: `Example only. Ingestion failure check ${stamp}.`, isTestData: true },
+    201,
+  );
+  const failDocId = trackCreated(failDocRes, "knowledgeDocumentIds");
+  await expectStatus("7FD1.16: chunk the failure-test document", "POST", `/knowledge-documents/${failDocId}/chunks?workspaceId=${wsA}`, null, 201);
+
+  await withEphemeralServer(5096, { AI_SERVICE_URL: "http://localhost:5999" }, async (base) => {
+    const embedAttempt = await fetch(`${base}/knowledge-documents/${failDocId}/embeddings?workspaceId=${wsA}`, { method: "POST" });
+    if (embedAttempt.status === 502) {
+      ok("7FD1.16c: a genuine embedding failure (Python unreachable) still surfaces the existing 502 behavior, unchanged");
+    } else {
+      fail("7FD1.16c: a genuine embedding failure surfaces the existing 502 behavior, unchanged", `status=${embedAttempt.status}`);
+    }
+  });
+
+  const failedDoc = await request("GET", `/knowledge-documents/${failDocId}?workspaceId=${wsA}`);
+  if (failedDoc.json?.data?.ingestionStatus === "failed") ok("7FD1.16d: a genuine embedding failure changes ingestionStatus pending -> failed");
+  else fail("7FD1.16d: a genuine embedding failure changes ingestionStatus pending -> failed", JSON.stringify(failedDoc.json?.data));
+
+  const ingestionErrorMessage = failedDoc.json?.data?.ingestionError;
+  const secretPattern = /ECONNREFUSED|fetch failed|node_modules|at\s+\S+\.js:\d+|Authorization:\s*Bearer/i;
+  if (typeof ingestionErrorMessage === "string" && ingestionErrorMessage.length > 0 && ingestionErrorMessage.length < 200 && !secretPattern.test(ingestionErrorMessage)) {
+    ok("7FD1.16e: ingestionError records only a short, safe message — no leaked internals");
+  } else {
+    fail("7FD1.16e: ingestionError records only a short, safe message", JSON.stringify(ingestionErrorMessage));
+  }
+
+  const filteredList = await request("GET", `/knowledge-documents?workspaceId=${wsA}&ingestionStatus=failed&limit=200`);
+  const filteredIds = (filteredList.json?.data || []).map((d) => d._id);
+  if (filteredIds.includes(failDocId)) ok("7FD1.16f: GET ?ingestionStatus=failed finds the failed document");
+  else fail("7FD1.16f: GET ?ingestionStatus=failed finds the failed document", JSON.stringify(filteredIds));
+  if (!filteredIds.includes(freshDocId)) ok("7FD1.16f: GET ?ingestionStatus=failed does not include a ready document");
+  else fail("7FD1.16f: GET ?ingestionStatus=failed does not include a ready document");
+
+  // Retry: re-running the EXISTING chunk/embed endpoints (against the
+  // real, working backend, not the broken ephemeral one above) is already
+  // a complete retry path — no new endpoint was added or is needed.
+  await expectStatus("7FD1.16: retry — re-chunk the failed document", "POST", `/knowledge-documents/${failDocId}/chunks?workspaceId=${wsA}`, null, 201);
+  await expectStatus("7FD1.16: retry — re-embed the failed document", "POST", `/knowledge-documents/${failDocId}/embeddings?workspaceId=${wsA}`, null, 201);
+  const recoveredDoc = await request("GET", `/knowledge-documents/${failDocId}?workspaceId=${wsA}`);
+  if (recoveredDoc.json?.data?.ingestionStatus === "ready") {
+    ok("7FD1.16g: the existing chunk/embed endpoints already form a complete retry path — failed -> ready, no new endpoint");
+  } else {
+    fail("7FD1.16g: the existing chunk/embed endpoints already form a complete retry path", JSON.stringify(recoveredDoc.json?.data));
+  }
+  if (recoveredDoc.json?.data?.ingestionError === undefined) ok("7FD1.16h: ingestionError is cleared after a successful retry");
+  else fail("7FD1.16h: ingestionError is cleared after a successful retry", JSON.stringify(recoveredDoc.json?.data));
+
+  if (freshDocRes.json?.data?.status === "active" && readyDoc.json?.data?.status === "active" && recoveredDoc.json?.data?.status === "active") {
+    ok("7FD1.16i: existing active/superseded/archived `status` behavior is completely unaffected by ingestionStatus");
+  } else {
+    fail(
+      "7FD1.16i: existing active/superseded/archived `status` behavior is completely unaffected by ingestionStatus",
+      JSON.stringify({ fresh: freshDocRes.json?.data?.status, ready: readyDoc.json?.data?.status, recovered: recoveredDoc.json?.data?.status }),
+    );
+  }
 
   await cleanup();
   ok("mongodb cleanup");

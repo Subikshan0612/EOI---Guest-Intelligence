@@ -2,6 +2,7 @@ import { KnowledgeChunk } from "../models/KnowledgeChunk.js";
 import { KnowledgeDocument } from "../models/KnowledgeDocument.js";
 import { requestEmbeddingsFromAiService } from "./ai/aiServiceClient.js";
 import { validateEmbeddingBatch } from "./knowledge/embeddingValidation.js";
+import { computeContentHash } from "./knowledgeDocumentService.js";
 import { AppError } from "../utils/AppError.js";
 import { requireObjectId } from "../utils/objectId.js";
 import { findInWorkspaceOr404 } from "./queryHelpers.js";
@@ -28,6 +29,55 @@ function toBatches(items, size) {
     batches.push(items.slice(i, i + size));
   }
   return batches;
+}
+
+/**
+ * Phase 7F-D2 follow-up — every error this function's own embedding
+ * attempt can throw is already one of this codebase's pre-sanitized
+ * AppError messages (aiServiceClient.js/embeddingValidation.js never leak
+ * a raw provider error, stack trace, or secret — see their own mapping
+ * functions) — the exact same text already returned to an HTTP caller for
+ * that failure, so reusing it here as ingestionError adds no new exposure.
+ * Anything unexpected (not an AppError) falls back to a fixed, generic
+ * message instead of risking an unsanitized error's own text.
+ */
+function safeIngestionErrorMessage(error) {
+  return error instanceof AppError ? error.message : "Embedding failed due to an internal error.";
+}
+
+/**
+ * Backfills contentHash on a legacy (pre-7F-D1) document before saving it
+ * for an unrelated field change — same guard already applied in
+ * knowledgeDocumentService.js's updateKnowledgeDocument/supersession path,
+ * needed here too since this module also calls document.save().
+ */
+function backfillContentHash(document) {
+  if (!document.contentHash) {
+    document.contentHash = computeContentHash(document.content);
+  }
+}
+
+async function markIngestionReady(document) {
+  backfillContentHash(document);
+  document.ingestionStatus = "ready";
+  document.ingestionError = undefined;
+  await document.save();
+}
+
+/**
+ * Best-effort: if this save itself fails (e.g. a genuine MongoDB
+ * connectivity issue), that secondary failure must never mask the
+ * original embedding error the caller is about to re-throw.
+ */
+async function markIngestionFailed(document, error) {
+  try {
+    backfillContentHash(document);
+    document.ingestionStatus = "failed";
+    document.ingestionError = safeIngestionErrorMessage(error);
+    await document.save();
+  } catch {
+    // best-effort status marking only — the original error below is what matters.
+  }
 }
 
 export async function embedKnowledgeDocument(documentId, workspaceId) {
@@ -69,30 +119,42 @@ export async function embedKnowledgeDocument(documentId, workspaceId) {
    * strongest guarantee achievable without standing up infrastructure this
    * phase doesn't otherwise need.
    */
+  // Phase 7F-D2 follow-up: this try/catch scopes ingestionStatus:"failed"
+  // to genuine embedding-attempt failures (Python unreachable, provider
+  // error, malformed/inconsistent response) — never to the "no chunks yet"
+  // precondition check above, which is a caller-usage error (nothing was
+  // actually attempted) rather than a pipeline failure.
   let dimension;
   const results = [];
-  for (const batch of batches) {
-    const texts = batch.map((chunk) => chunk.text);
-    const { embeddings, model } = await requestEmbeddingsFromAiService(texts);
-    dimension = validateEmbeddingBatch(embeddings, model, texts.length, dimension);
+  try {
+    for (const batch of batches) {
+      const texts = batch.map((chunk) => chunk.text);
+      const { embeddings, model } = await requestEmbeddingsFromAiService(texts);
+      dimension = validateEmbeddingBatch(embeddings, model, texts.length, dimension);
 
-    batch.forEach((chunk, i) => {
-      results.push({ chunk, embedding: embeddings[i], model });
-    });
+      batch.forEach((chunk, i) => {
+        results.push({ chunk, embedding: embeddings[i], model });
+      });
+    }
+
+    await KnowledgeChunk.bulkWrite(
+      results.map(({ chunk, embedding, model }) => ({
+        updateOne: {
+          // documentId/version repeated in the filter even though `_id` alone
+          // already uniquely identifies the chunk — belt-and-suspenders
+          // against ever touching a chunk from another document or version.
+          filter: { _id: chunk._id, documentId: document._id, version: document.version },
+          update: { $set: { embedding, embeddingModel: model } },
+        },
+      })),
+      { ordered: true },
+    );
+  } catch (error) {
+    await markIngestionFailed(document, error);
+    throw error;
   }
 
-  await KnowledgeChunk.bulkWrite(
-    results.map(({ chunk, embedding, model }) => ({
-      updateOne: {
-        // documentId/version repeated in the filter even though `_id` alone
-        // already uniquely identifies the chunk — belt-and-suspenders
-        // against ever touching a chunk from another document or version.
-        filter: { _id: chunk._id, documentId: document._id, version: document.version },
-        update: { $set: { embedding, embeddingModel: model } },
-      },
-    })),
-    { ordered: true },
-  );
+  await markIngestionReady(document);
 
   return {
     documentId: String(document._id),

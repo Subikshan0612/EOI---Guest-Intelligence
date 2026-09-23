@@ -31,6 +31,14 @@ export function errorHandler(err, _req, res, _next) {
   res.status(statusCode).json({
     success: false,
     message: isServerError && env.isProduction ? "Internal server error" : message,
+    // Phase 7F-D2 follow-up: `details` is an explicit, opt-in field a
+    // throwing call site sets deliberately (e.g. AppError's own optional
+    // 3rd constructor argument) — unlike `message`, it is never masked for
+    // a production 5xx, since by construction it only ever holds something
+    // the throwing code already decided was safe to expose (e.g. a
+    // resource id the caller's own request just created), never a raw
+    // provider error, stack trace, or secret.
+    ...(err.details !== undefined ? { details: err.details } : {}),
     ...(env.isProduction || !err.stack ? {} : { stack: err.stack }),
   });
 }

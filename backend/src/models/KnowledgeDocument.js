@@ -19,6 +19,15 @@ const KNOWLEDGE_DOCUMENT_TYPES = ["sop", "policy", "procedure", "guideline", "st
 // today.
 const KNOWLEDGE_SOURCE_TYPES = ["manual-entry", "txt-upload", "md-upload", "pdf-upload", "docx-upload"];
 const KNOWLEDGE_STATUSES = ["active", "superseded", "archived"];
+// Phase 7F-D2 follow-up — orthogonal to KNOWLEDGE_STATUSES above: `status`
+// is the business/content lifecycle (is this document currently in force),
+// `ingestionStatus` is purely technical pipeline completeness (has this
+// document's current version been fully chunked+embedded). A document can
+// be `status: "active"` and `ingestionStatus: "pending"` at the same time
+// — that combination isn't a contradiction, it's simply "valid content
+// that hasn't finished processing yet" (true of every manually-created
+// document today, between its create and embed calls).
+const KNOWLEDGE_INGESTION_STATUSES = ["pending", "ready", "failed"];
 
 const knowledgeDocumentSchema = new mongoose.Schema(
   {
@@ -96,6 +105,27 @@ const knowledgeDocumentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Phase 7F-D2 follow-up — set only by knowledgeEmbeddingService.js's
+    // embedKnowledgeDocument, never by any create/update caller (not part
+    // of any request body a controller passes through). "pending" is the
+    // correct, unremarkable default for every newly-created document —
+    // chunking/embedding has always been a separate step in this
+    // architecture, on both the manual-entry and upload paths.
+    ingestionStatus: {
+      type: String,
+      enum: KNOWLEDGE_INGESTION_STATUSES,
+      default: "pending",
+    },
+    // Set alongside ingestionStatus:"failed"; always a short, already-
+    // sanitized message (the same text this codebase already returns to
+    // an HTTP caller for the same failure — never a raw provider error,
+    // stack trace, or secret). Cleared back to undefined on a subsequent
+    // successful embed.
+    ingestionError: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
     status: {
       type: String,
       enum: KNOWLEDGE_STATUSES,
@@ -152,4 +182,4 @@ knowledgeDocumentSchema.index(
 );
 
 export const KnowledgeDocument = mongoose.model("KnowledgeDocument", knowledgeDocumentSchema);
-export { KNOWLEDGE_DOCUMENT_TYPES, KNOWLEDGE_SOURCE_TYPES, KNOWLEDGE_STATUSES };
+export { KNOWLEDGE_DOCUMENT_TYPES, KNOWLEDGE_SOURCE_TYPES, KNOWLEDGE_STATUSES, KNOWLEDGE_INGESTION_STATUSES };
