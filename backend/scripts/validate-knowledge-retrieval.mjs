@@ -80,7 +80,12 @@ function trackCreated(result, bucket) {
 }
 
 async function createAndIndexDocument(body) {
-  const docRes = await expectStatus(`fixture: create "${body.title}"`, "POST", "/knowledge-documents", body, 201);
+  // Phase 7F-D1: this suite deliberately creates many documents with
+  // identical/near-identical content across different scopes/versions to
+  // test retrieval ranking (see the file's own header comment) — exactly
+  // the pattern the new duplicate-content constraint would otherwise
+  // reject. isTestData:true exempts synthetic fixtures like these from it.
+  const docRes = await expectStatus(`fixture: create "${body.title}"`, "POST", "/knowledge-documents", { isTestData: true, ...body }, 201);
   const id = trackCreated(docRes, "knowledgeDocumentIds");
   await expectStatus(`fixture: chunk "${body.title}"`, "POST", `/knowledge-documents/${id}/chunks?workspaceId=${body.workspaceId}`, null, 201);
   await expectStatus(`fixture: embed "${body.title}"`, "POST", `/knowledge-documents/${id}/embeddings?workspaceId=${body.workspaceId}`, null, 201);
@@ -212,7 +217,7 @@ async function main() {
   await connectDatabase();
   const capWs = trackCreated(await expectStatus("6G.7: cap-test workspace create", "POST", "/workspaces", { name: `Phase6G Cap WS ${stamp}`, slug: `phase6g-cap-ws-${stamp}` }, 201), "workspaceIds");
   const capDoc = trackCreated(
-    await expectStatus("6G.7: cap-test document create", "POST", "/knowledge-documents", { workspaceId: capWs, title: "Cap test doc", documentType: "guideline", content: "placeholder" }, 201),
+    await expectStatus("6G.7: cap-test document create", "POST", "/knowledge-documents", { workspaceId: capWs, title: "Cap test doc", documentType: "guideline", content: "placeholder", isTestData: true }, 201),
     "knowledgeDocumentIds",
   );
   const capChunks = [];

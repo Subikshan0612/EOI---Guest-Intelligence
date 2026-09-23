@@ -170,6 +170,7 @@ async function main() {
       title: "Example: AC Failure Escalation SOP",
       documentType: "sop",
       content: "Example only. AC failures in occupied units should be escalated promptly.",
+      isTestData: true,
     },
     201,
   );
@@ -194,6 +195,7 @@ async function main() {
       title: "Example: HVAC Local Vendor Procedure",
       documentType: "procedure",
       content: "Example only. Contact the on-call HVAC vendor for this property.",
+      isTestData: true,
     },
     201,
   );
@@ -216,6 +218,7 @@ async function main() {
       title: "Example: Unit 101 HVAC Controller Note",
       documentType: "guideline",
       content: "Example only. This unit has a non-standard thermostat model.",
+      isTestData: true,
     },
     201,
   );
@@ -433,6 +436,7 @@ async function main() {
       content: "Example only. Escalate AC failures within 30 minutes (v2).",
       version: 2,
       supersedesId: docId,
+      isTestData: true,
     },
     201,
   );
@@ -480,7 +484,7 @@ async function main() {
     "6B.12: workspace B document create",
     "POST",
     "/knowledge-documents",
-    { workspaceId: wsB, title: "B's own SOP", documentType: "sop", content: "Example only." },
+    { workspaceId: wsB, title: "B's own SOP", documentType: "sop", content: "Example only.", isTestData: true },
     201,
   );
   const docB = trackCreated(docBRes, "knowledgeDocumentIds");

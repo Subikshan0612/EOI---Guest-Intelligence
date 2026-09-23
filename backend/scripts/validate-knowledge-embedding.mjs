@@ -96,7 +96,9 @@ async function getChunks(documentId, workspaceId) {
 }
 
 async function createDocument(body) {
-  const res = await expectStatus(`fixture: create "${body.title}"`, "POST", "/knowledge-documents", body, 201);
+  // Phase 7F-D1: synthetic test content, exempt from the new duplicate-
+  // content constraint (see validate-knowledge-chunking.mjs's identical note).
+  const res = await expectStatus(`fixture: create "${body.title}"`, "POST", "/knowledge-documents", { isTestData: true, ...body }, 201);
   return trackCreated(res, "knowledgeDocumentIds");
 }
 
@@ -258,7 +260,7 @@ async function main() {
   // TENANT ISOLATION
   // =========================================================
   const docBId = trackCreated(
-    await expectStatus("6E ISOLATION: workspace B document create", "POST", "/knowledge-documents", { workspaceId: wsB, title: "B's own SOP", documentType: "sop", content: "Example only. B's content." }, 201),
+    await expectStatus("6E ISOLATION: workspace B document create", "POST", "/knowledge-documents", { workspaceId: wsB, title: "B's own SOP", documentType: "sop", content: "Example only. B's content.", isTestData: true }, 201),
     "knowledgeDocumentIds",
   );
   await expectStatus("6E ISOLATION: chunk B's document", "POST", `/knowledge-documents/${docBId}/chunks?workspaceId=${wsB}`, null, 201);

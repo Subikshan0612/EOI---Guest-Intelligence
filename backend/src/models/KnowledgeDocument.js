@@ -12,7 +12,12 @@ import mongoose from "mongoose";
  */
 
 const KNOWLEDGE_DOCUMENT_TYPES = ["sop", "policy", "procedure", "guideline", "standard"];
-const KNOWLEDGE_SOURCE_TYPES = ["upload", "manual-entry"];
+// Phase 7F-D1 — replaces the old placeholder "upload" value (never actually
+// set by any code path; Phase 6B reserved it for a file-ingestion flow that
+// didn't exist yet) with the real values 7F-D2+ file ingestion will set
+// programmatically. "manual-entry" remains the only value any code sets
+// today.
+const KNOWLEDGE_SOURCE_TYPES = ["manual-entry", "txt-upload", "md-upload", "pdf-upload", "docx-upload"];
 const KNOWLEDGE_STATUSES = ["active", "superseded", "archived"];
 
 const knowledgeDocumentSchema = new mongoose.Schema(
@@ -63,6 +68,34 @@ const knowledgeDocumentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    // Phase 7F-D1 — original file name, when this document came from an
+    // uploaded file. Always optional: manual-entry has no file at all, and
+    // file ingestion itself is not implemented until 7F-D2+. Purely
+    // descriptive metadata — never used for any lookup/validation.
+    sourceFilename: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
+    // Phase 7F-D1 — deterministic SHA-256 hash of this document's own
+    // `content`, computed server-side on every create (never accepted from
+    // a caller — see knowledgeDocumentService.js's computeContentHash).
+    // Drives duplicate detection below; also lets a future re-embedding or
+    // dedup job compare documents without re-hashing large text repeatedly.
+    contentHash: {
+      type: String,
+      required: true,
+    },
+    // Phase 7F-D1 — structurally marks a document as synthetic/test
+    // content rather than real business data (explicitly requested so 7F-D+
+    // ingestion work can use sample documents without them being mistaken
+    // for real SOPs/policies). Also exempts a document from the duplicate-
+    // content constraint below — accidental duplication is a real-content
+    // concern; deliberately near-identical test fixtures are not.
+    isTestData: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: KNOWLEDGE_STATUSES,
@@ -98,6 +131,25 @@ const knowledgeDocumentSchema = new mongoose.Schema(
 
 knowledgeDocumentSchema.index({ workspaceId: 1, propertyId: 1, status: 1 });
 knowledgeDocumentSchema.index({ workspaceId: 1, createdAt: -1 });
+// Phase 7F-D1 — deterministic duplicate-content detection, scoped by tenant
+// and by the exact same scope tier the rest of the architecture already
+// uses (workspace/property/unit). A document missing propertyId/unitId
+// indexes as null for each, which MongoDB already treats as its own
+// distinct bucket for uniqueness — matching the "workspace-wide" scope
+// bucket this codebase already relies on elsewhere (e.g.
+// knowledgeRetrievalService.js's buildScopeFilter). Scoped to
+// status:"active" (a superseded/archived document no longer blocks a new
+// one from using the same content) and isTestData:false (synthetic/sample
+// documents are explicitly exempt — see the field's own comment above).
+// A conflict here surfaces as a MongoDB E11000 error, already mapped to
+// HTTP 409 by the existing generic errorHandler.js/queryHelpers.js
+// isDuplicateKeyError path — the same mechanism Guest.externalId and
+// Stay.reservationId already rely on, so no new error-handling code was
+// needed for this.
+knowledgeDocumentSchema.index(
+  { workspaceId: 1, propertyId: 1, unitId: 1, contentHash: 1 },
+  { unique: true, partialFilterExpression: { status: "active", isTestData: false } },
+);
 
 export const KnowledgeDocument = mongoose.model("KnowledgeDocument", knowledgeDocumentSchema);
 export { KNOWLEDGE_DOCUMENT_TYPES, KNOWLEDGE_SOURCE_TYPES, KNOWLEDGE_STATUSES };

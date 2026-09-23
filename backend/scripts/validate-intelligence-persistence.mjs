@@ -80,7 +80,9 @@ function trackCreated(result, bucket) {
 }
 
 async function createAndIndexDocument(body) {
-  const docRes = await expectStatus(`fixture: create "${body.title}"`, "POST", "/knowledge-documents", body, 201);
+  // Phase 7F-D1: synthetic test content, exempt from the new duplicate-
+  // content constraint (see validate-knowledge-retrieval.mjs's identical note).
+  const docRes = await expectStatus(`fixture: create "${body.title}"`, "POST", "/knowledge-documents", { isTestData: true, ...body }, 201);
   const id = trackCreated(docRes, "knowledgeDocumentIds");
   await expectStatus(`fixture: chunk "${body.title}"`, "POST", `/knowledge-documents/${id}/chunks?workspaceId=${body.workspaceId}`, null, 201);
   await expectStatus(`fixture: embed "${body.title}"`, "POST", `/knowledge-documents/${id}/embeddings?workspaceId=${body.workspaceId}`, null, 201);

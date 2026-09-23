@@ -86,11 +86,15 @@ function trackCreated(result, bucket) {
 }
 
 async function createDocument(body) {
+  // Phase 7F-D1: every fixture this suite creates is synthetic test
+  // content, not real business data — isTestData:true also exempts it from
+  // the new duplicate-content constraint, which this file's fixtures don't
+  // exercise or need to be subject to.
   const res = await expectStatus(
     `fixture: create "${body.title}"`,
     "POST",
     "/knowledge-documents",
-    body,
+    { isTestData: true, ...body },
     201,
   );
   return trackCreated(res, "knowledgeDocumentIds");
@@ -415,7 +419,7 @@ async function main() {
       "6D ISOLATION: workspace B document create",
       "POST",
       "/knowledge-documents",
-      { workspaceId: wsB, title: "B's own SOP", documentType: "sop", content: "Example only. B's content." },
+      { workspaceId: wsB, title: "B's own SOP", documentType: "sop", content: "Example only. B's content.", isTestData: true },
       201,
     ),
     "knowledgeDocumentIds",
@@ -463,14 +467,28 @@ async function main() {
   const denormRow = (denormCheck.json?.data || [])[0];
   const docCheck = await request("GET", `/knowledge-documents/${sopId}?workspaceId=${wsA}`);
   const parentDoc = docCheck.json?.data;
+  // Phase 7F-D1: the VERSION ISOLATION section above superseded sopId via
+  // v2Id, so sopId's own status is now (correctly, per 7F-D1's hardened
+  // supersession) "superseded" — but these chunks were created before that
+  // and were never re-chunked since, so their denormalized status still
+  // correctly reflects the parent's status AT CHUNK TIME, not its current
+  // status. This is the same "chunks snapshot, they don't live-join"
+  // principle validate-knowledge-retrieval.mjs's 6G.13 test already relies
+  // on (it explicitly re-chunks after superseding, specifically to refresh
+  // this). Split into two assertions to prove both facts explicitly.
+  if (parentDoc?.status === "superseded") {
+    ok("6D DENORM (7F-D1): the parent document was auto-marked superseded by the later supersession");
+  } else {
+    fail("6D DENORM (7F-D1): the parent document was auto-marked superseded by the later supersession", JSON.stringify(parentDoc));
+  }
   if (
     String(denormRow?.workspaceId) === String(parentDoc?.workspaceId) &&
     String(denormRow?.propertyId) === String(parentDoc?.propertyId) &&
-    denormRow?.status === parentDoc?.status
+    denormRow?.status === "active"
   ) {
-    ok("6D DENORM: chunk workspaceId/propertyId/status come from the parent document");
+    ok("6D DENORM: chunk workspaceId/propertyId/status reflect the parent document at chunk time — a snapshot, not a live join");
   } else {
-    fail("6D DENORM: chunk workspaceId/propertyId/status come from the parent document", JSON.stringify({ denormRow, parentDoc }));
+    fail("6D DENORM: chunk workspaceId/propertyId/status reflect the parent document at chunk time — a snapshot, not a live join", JSON.stringify({ denormRow, parentDoc }));
   }
 
   const injectionRes = await expectStatus(

@@ -173,6 +173,7 @@ async function main() {
       documentType: "policy",
       sourceType: "manual-entry",
       content: "Example only. Escalate high-severity signals to on-call staff.",
+      isTestData: true,
     },
     201,
   );
@@ -188,6 +189,7 @@ async function main() {
       title: "Example: Property Maintenance Procedure",
       documentType: "procedure",
       content: "Example only. Contact the property's on-call maintenance vendor.",
+      isTestData: true,
     },
     201,
   );
@@ -204,6 +206,7 @@ async function main() {
       title: "Example: Unit 201 Guideline",
       documentType: "guideline",
       content: "Example only. This unit has a non-standard thermostat.",
+      isTestData: true,
     },
     201,
   );
@@ -219,6 +222,7 @@ async function main() {
       documentType: "standard",
       content: "Example only.",
       version: 3,
+      isTestData: true,
     },
     201,
   );
@@ -237,6 +241,7 @@ async function main() {
       content: "Example only.",
       effectiveFrom: "2026-01-01T00:00:00.000Z",
       effectiveTo: "2026-12-31T00:00:00.000Z",
+      isTestData: true,
     },
     201,
   );
@@ -253,6 +258,7 @@ async function main() {
       content: "Example only. Escalate high-severity signals within 15 minutes (v2).",
       version: 2,
       supersedesId: wsWideId,
+      isTestData: true,
     },
     201,
   );
@@ -423,7 +429,7 @@ async function main() {
       "6C ISOLATION: workspace B document create",
       "POST",
       "/knowledge-documents",
-      { workspaceId: wsB, title: "B's own policy", documentType: "policy", content: "Example only." },
+      { workspaceId: wsB, title: "B's own policy", documentType: "policy", content: "Example only.", isTestData: true },
       201,
     ),
     "knowledgeDocumentIds",
@@ -494,12 +500,16 @@ async function main() {
   if (supersedeId && supersedeId !== wsWideId) ok("6C LINEAGE: new version is a distinct document row");
   else fail("6C LINEAGE: new version is a distinct document row");
 
+  // Phase 7F-D1: hardened supersession now marks the superseded document
+  // superseded automatically, specifically to prevent both the old and new
+  // versions from being simultaneously active (the previous, pre-7F-D1
+  // behavior this test used to assert was the exact gap 7F-D1 closes).
   const originalAfterSupersede = await request("GET", `/knowledge-documents/${wsWideId}?workspaceId=${wsA}`);
-  if (originalAfterSupersede.json?.data?.status === "active") {
-    ok("6C LINEAGE: previous version was not automatically mutated by creating a new one");
+  if (originalAfterSupersede.json?.data?.status === "superseded") {
+    ok("6C LINEAGE (7F-D1): previous version was automatically marked superseded by creating a new one");
   } else {
     fail(
-      "6C LINEAGE: previous version was not automatically mutated by creating a new one",
+      "6C LINEAGE (7F-D1): previous version was automatically marked superseded by creating a new one",
       JSON.stringify(originalAfterSupersede.json?.data),
     );
   }

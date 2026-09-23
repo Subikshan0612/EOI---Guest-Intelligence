@@ -137,7 +137,9 @@ async function withEphemeralServer(port, envOverrides, fn) {
 }
 
 async function createAndIndexDocument(body) {
-  const docRes = await expectStatus(`fixture: create "${body.title}"`, "POST", "/knowledge-documents", body, 201);
+  // Phase 7F-D1: synthetic test content, exempt from the new duplicate-
+  // content constraint (see validate-knowledge-retrieval.mjs's identical note).
+  const docRes = await expectStatus(`fixture: create "${body.title}"`, "POST", "/knowledge-documents", { isTestData: true, ...body }, 201);
   const id = trackCreated(docRes, "knowledgeDocumentIds");
   await expectStatus(`fixture: chunk "${body.title}"`, "POST", `/knowledge-documents/${id}/chunks?workspaceId=${body.workspaceId}`, null, 201);
   await expectStatus(`fixture: embed "${body.title}"`, "POST", `/knowledge-documents/${id}/embeddings?workspaceId=${body.workspaceId}`, null, 201);
@@ -263,7 +265,7 @@ async function main() {
   // mocking anywhere in this test: the real running Python service really
   // does refuse this request.
   const failureWs = trackCreated(await expectStatus("6H.2-4: failure-test workspace create", "POST", "/workspaces", { name: `Phase6H Failure WS ${stamp}`, slug: `phase6h-failure-ws-${stamp}` }, 201), "workspaceIds");
-  const failureDocRes = await expectStatus("6H.2-4: failure-test document create", "POST", "/knowledge-documents", { workspaceId: failureWs, title: "Example: Corrupted Vector Doc", documentType: "guideline", content: "placeholder" }, 201);
+  const failureDocRes = await expectStatus("6H.2-4: failure-test document create", "POST", "/knowledge-documents", { workspaceId: failureWs, title: "Example: Corrupted Vector Doc", documentType: "guideline", content: "placeholder", isTestData: true }, 201);
   const failureDocId = trackCreated(failureDocRes, "knowledgeDocumentIds");
 
   await connectDatabase();

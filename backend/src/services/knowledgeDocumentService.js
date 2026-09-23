@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { KnowledgeDocument } from "../models/KnowledgeDocument.js";
 import { Property } from "../models/Property.js";
 import { Unit } from "../models/Unit.js";
@@ -42,6 +43,8 @@ const UPDATABLE = [
   "supersedesId",
   "effectiveFrom",
   "effectiveTo",
+  "sourceFilename",
+  "isTestData",
 ];
 
 /** effectiveFrom/effectiveTo must be valid dates when supplied; both are optional. */
@@ -84,6 +87,49 @@ function assertEffectiveWindowOrdered(effectiveFrom, effectiveTo) {
   }
 }
 
+/** Phase 7F-D1 — isTestData is a plain boolean flag; reject anything else outright rather than let Mongoose loosely cast it. */
+function assertValidBoolean(value, fieldName) {
+  if (value === undefined) return;
+  if (typeof value !== "boolean") {
+    throw new AppError(`${fieldName} must be a boolean`, 400);
+  }
+}
+
+/**
+ * Phase 7F-D1 — deterministic SHA-256 of a document's own canonical
+ * `content`, exactly as stored (no trimming/normalization added here:
+ * content deliberately preserves an SOP's exact formatting, per the
+ * existing `content` field's own comment). Same input always produces the
+ * same hash; never accepted from a caller, always computed here.
+ */
+function computeContentHash(content) {
+  return createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+/**
+ * Phase 7F-D1 — resolves and validates the scope (propertyId/unitId) a new
+ * version must have relative to the document it supersedes. A "new
+ * version" is the same document at a later point in time, not a different
+ * document, so its scope must match the superseded document's scope
+ * exactly: inherited when the caller didn't specify one, and rejected
+ * outright if the caller specified one that disagrees.
+ */
+function resolveSupersessionScope(superseded, bodyPropertyId, bodyUnitId) {
+  const propertyId = bodyPropertyId !== undefined ? bodyPropertyId : superseded.propertyId;
+  const unitId = bodyUnitId !== undefined ? bodyUnitId : superseded.unitId;
+
+  const supersededPropertyId = superseded.propertyId ? String(superseded.propertyId) : null;
+  const supersededUnitId = superseded.unitId ? String(superseded.unitId) : null;
+  const resolvedPropertyId = propertyId ? String(propertyId) : null;
+  const resolvedUnitId = unitId ? String(unitId) : null;
+
+  if (resolvedPropertyId !== supersededPropertyId || resolvedUnitId !== supersededUnitId) {
+    throw new AppError("A new version's scope (propertyId/unitId) must match the document it supersedes", 400);
+  }
+
+  return { propertyId, unitId };
+}
+
 /**
  * Validates every optional relationship a KnowledgeDocument may carry —
  * same shape as signalService.js's validateOptionalRefs: not just that each
@@ -112,14 +158,38 @@ async function validateOptionalRefs(workspaceId, refs) {
   }
 }
 
+/**
+ * Phase 7F-D1 — when `body.supersedesId` is given, this same create call is
+ * also a supersession: the new document's version is always derived from
+ * the superseded document server-side (a caller-supplied `version` is
+ * ignored entirely in this case — it is never trustworthy, per the phase's
+ * explicit requirement), its scope must match the superseded document's
+ * scope (resolveSupersessionScope), and — once the new document has been
+ * created successfully — the superseded document is marked
+ * `status: "superseded"` if it was still `"active"` (left untouched if it
+ * was already `"archived"`, since the goal is only ever "never both
+ * active," not forcing a specific terminal status).
+ *
+ * Order matters for safety: the new document is created FIRST, and the old
+ * one is only updated after that succeeds. No MongoDB transaction wraps
+ * these two writes (this project's established convention — see
+ * knowledgeChunkService.js's own reasoning — since the local MongoDB
+ * instance is standalone, not a replica set). If a request fails validation
+ * (bad workspace, scope mismatch, unknown supersedesId), it throws before
+ * either write happens, so an invalid supersession attempt never partially
+ * mutates anything. A failure between the two writes (a genuine, rare
+ * MongoDB-level failure on the second write) is a known, accepted gap of
+ * not using a transaction here — see the phase report's architectural
+ * concerns.
+ */
 export async function createKnowledgeDocument(body) {
   requireFields(body, ["workspaceId", "title", "documentType", "content"]);
   assertNonBlankContent(body.content);
-  assertValidVersion(body.version);
   const workspaceId = requireObjectId(body.workspaceId, "workspaceId");
   assertValidDate(body.effectiveFrom, "effectiveFrom");
   assertValidDate(body.effectiveTo, "effectiveTo");
   assertEffectiveWindowOrdered(body.effectiveFrom, body.effectiveTo);
+  assertValidBoolean(body.isTestData, "isTestData");
   await assertExists(Workspace, workspaceId, "Workspace");
 
   const refs = {
@@ -130,18 +200,50 @@ export async function createKnowledgeDocument(body) {
 
   await validateOptionalRefs(workspaceId, refs);
 
+  let supersededDocument = null;
+  let version;
+  let { propertyId, unitId } = refs;
+
+  if (refs.supersedesId) {
+    supersededDocument = await findByIdOr404(KnowledgeDocument, refs.supersedesId, "KnowledgeDocument");
+    ({ propertyId, unitId } = resolveSupersessionScope(supersededDocument, refs.propertyId, refs.unitId));
+    version = supersededDocument.version + 1;
+  } else {
+    assertValidVersion(body.version);
+    version = body.version ?? 1;
+  }
+
+  const contentHash = computeContentHash(body.content);
+
   const document = await KnowledgeDocument.create({
     workspaceId,
-    ...refs,
+    propertyId,
+    unitId,
+    supersedesId: refs.supersedesId,
     title: body.title,
     documentType: body.documentType,
     sourceType: body.sourceType,
     content: body.content,
+    contentHash,
+    sourceFilename: body.sourceFilename,
+    isTestData: body.isTestData,
     status: body.status,
-    version: body.version,
+    version,
     effectiveFrom: body.effectiveFrom,
     effectiveTo: body.effectiveTo,
   });
+
+  if (supersededDocument && supersededDocument.status === "active") {
+    // Same legacy-document safeguard as updateKnowledgeDocument's own
+    // backfill: a document created before 7F-D1 shipped may have no
+    // contentHash in MongoDB, which would otherwise fail this save's
+    // full-document validation over an unrelated field.
+    if (!supersededDocument.contentHash) {
+      supersededDocument.contentHash = computeContentHash(supersededDocument.content);
+    }
+    supersededDocument.status = "superseded";
+    await supersededDocument.save();
+  }
 
   return toPlain(document);
 }
@@ -204,12 +306,23 @@ export async function updateKnowledgeDocument(id, body, workspaceId) {
     updates.effectiveFrom ?? document.effectiveFrom,
     updates.effectiveTo ?? document.effectiveTo,
   );
+  assertValidBoolean(updates.isTestData, "isTestData");
 
   await validateOptionalRefs(document.workspaceId, {
     propertyId: updates.propertyId ?? document.propertyId,
     unitId: updates.unitId ?? document.unitId,
     supersedesId: updates.supersedesId,
   });
+
+  // Phase 7F-D1 — contentHash is required on the schema going forward, but a
+  // document created before this phase shipped has no such field in
+  // MongoDB. Backfilling it here (derived from the document's own,
+  // unchanged `content`) means an old document self-heals on its next
+  // PATCH instead of failing full-document validation on save — no
+  // migration script needed.
+  if (!document.contentHash) {
+    document.contentHash = computeContentHash(document.content);
+  }
 
   Object.assign(document, updates);
   await document.save();
