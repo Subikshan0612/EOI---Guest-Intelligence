@@ -14,7 +14,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
-import { Workspace, Signal } from "../src/models/index.js";
+import { Workspace, Signal, Intelligence } from "../src/models/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ENTRY = path.join(__dirname, "..", "server.js");
@@ -140,6 +140,9 @@ function assertValidIntelligenceShape(name, data) {
 
 async function cleanup() {
   await connectDatabase();
+  // Phase 7F-C — every successful generate call now persists an
+  // Intelligence record; clean those up too, scoped by workspaceId.
+  await Intelligence.deleteMany({ workspaceId: { $in: created.workspaceIds } });
   await Signal.deleteMany({ _id: { $in: created.signalIds } });
   await Workspace.deleteMany({ _id: { $in: created.workspaceIds } });
   await disconnectDatabase();
@@ -239,12 +242,28 @@ async function main() {
         fail("5.1: response is grounded in the actual Signal's own title", validRes.json?.data?.summary);
       }
 
-      // === Determinism: the same signal generates identical output twice ===
+      // === Determinism: the same signal generates identical CONTENT twice ===
+      // Phase 7F-C: each generation now persists its own Intelligence record,
+      // so `_id`/`createdAt` legitimately differ between the two calls even
+      // though the deterministic stub's actual content does not — those two
+      // identity fields are excluded from the comparison below rather than
+      // the whole response, so this still genuinely verifies determinism of
+      // generation, not persistence identity.
       const secondRes = await request(base, "POST", `/signals/${signalA}/intelligence?workspaceId=${wsA}`, null);
-      if (JSON.stringify(secondRes.json?.data) === JSON.stringify(validRes.json?.data)) {
-        ok("5.2: repeated generation is deterministic (identical output)");
+      const stripIdentity = ({ _id, createdAt, ...rest }) => rest;
+      if (
+        validRes.json?.data &&
+        secondRes.json?.data &&
+        JSON.stringify(stripIdentity(secondRes.json.data)) === JSON.stringify(stripIdentity(validRes.json.data))
+      ) {
+        ok("5.2: repeated generation is deterministic (identical content)");
       } else {
-        fail("5.2: repeated generation is deterministic (identical output)");
+        fail("5.2: repeated generation is deterministic (identical content)");
+      }
+      if (secondRes.json?.data?._id && secondRes.json.data._id !== validRes.json?.data?._id) {
+        ok("5.2b: repeated generation persists a distinct Intelligence record each time");
+      } else {
+        fail("5.2b: repeated generation persists a distinct Intelligence record each time", JSON.stringify(secondRes.json?.data?._id));
       }
 
       // === Tenant boundary: enforced BEFORE Python is ever reached ===

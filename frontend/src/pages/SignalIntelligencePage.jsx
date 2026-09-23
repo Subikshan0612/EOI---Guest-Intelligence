@@ -152,6 +152,8 @@ export default function SignalIntelligencePage() {
             <IntelligenceProvenance
               confidence={intelligence.confidence}
               provenance={intelligence.provenance}
+              intelligenceId={intelligence._id}
+              generatedAt={intelligence.createdAt}
             />
             <div className="op-form-actions">
               <button type="button" className="text-button" onClick={generateIntelligence}>

@@ -28,7 +28,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
-import { Workspace, Property, Unit, Guest, Stay, Signal } from "../src/models/index.js";
+import { Workspace, Property, Unit, Guest, Stay, Signal, Intelligence } from "../src/models/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ENTRY = path.join(__dirname, "..", "server.js");
@@ -170,6 +170,11 @@ function assertValidIntelligenceShape(name, data) {
 
 async function cleanup() {
   await connectDatabase();
+  // Phase 7F-C — every successful generate call now persists an
+  // Intelligence record; clean those up too, scoped by workspaceId rather
+  // than individually tracked ids (this suite never called Intelligence
+  // CRUD endpoints directly, so there's no existing trackCreated bucket).
+  await Intelligence.deleteMany({ workspaceId: { $in: created.workspaceIds } });
   await Signal.deleteMany({ _id: { $in: created.signalIds } });
   await Stay.deleteMany({ _id: { $in: created.stayIds } });
   await Guest.deleteMany({ _id: { $in: created.guestIds } });

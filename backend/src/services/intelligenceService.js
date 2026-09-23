@@ -83,6 +83,56 @@ export async function createIntelligence(body) {
   return toPlain(intelligence);
 }
 
+/**
+ * Phase 7F-C — persists an already-validated, already-trusted AI-generated
+ * Intelligence result. Called only from services/ai/intelligenceService.js,
+ * after Node's own validateIntelligenceResult + provenance re-filtering has
+ * already run — never with raw Python/Gemini output.
+ *
+ * Distinct from createIntelligence above (the Phase-2 CRUD entry point for
+ * manually-created records, reached via POST /api/intelligence with an
+ * arbitrary request body): this function takes trusted, already-shaped
+ * arguments, not a request body, and performs no body-shaped field
+ * validation of its own — every value it receives has already been proven
+ * to belong to the caller's own workspace by the AI generation pipeline
+ * (assembleSignalContext's workspace-scoped Guest/Stay/Signal lookups), so
+ * re-validating those references here would be redundant, not safer.
+ *
+ * generatedBy is always "llm" here — this is how a persisted record is
+ * distinguished from a manually-created one (createIntelligence defaults to
+ * "system" unless a caller overrides it).
+ */
+export async function createGeneratedIntelligence({
+  workspaceId,
+  signalId,
+  guestId,
+  stayId,
+  signal,
+  result,
+  provider,
+  model,
+}) {
+  const intelligence = await Intelligence.create({
+    workspaceId,
+    signalIds: signalId ? [signalId] : [],
+    guestId,
+    stayId,
+    signal,
+    intelligence: { summary: result.summary, findings: result.findings },
+    risk: result.risk,
+    decision: { recommendation: result.decision.recommendation, rationale: result.decision.rationale },
+    action: { label: result.action.label, recommended: result.action.recommended },
+    outcome: { expected: result.outcome.expected },
+    confidence: result.confidence,
+    generatedBy: "llm",
+    provider,
+    model,
+    knowledgeProvenance: result.knowledgeProvenance?.length ? result.knowledgeProvenance : undefined,
+  });
+
+  return toPlain(intelligence);
+}
+
 export async function listIntelligence(query) {
   const workspaceId = requireObjectId(query.workspaceId, "workspaceId");
   const pagination = parsePagination(query);

@@ -6,6 +6,7 @@ import { buildIntelligencePrompt } from "./intelligencePrompt.js";
 import { getActiveProviderInfo, isAiConfigured, requestStructuredIntelligence } from "./llmProvider.js";
 import { requestIntelligenceFromAiService } from "./aiServiceClient.js";
 import { validateIntelligenceResult } from "./intelligenceSchema.js";
+import { createGeneratedIntelligence } from "../intelligenceService.js";
 
 /**
  * Node provider values that delegate generation to the Python AI service
@@ -31,13 +32,18 @@ const PYTHON_ROUTED_PROVIDERS = new Set(["gemini", "test-python"]);
 /**
  * Signal → deterministic Operational Context (Phase 3D, reused as-is) →
  * knowledge retrieval (Phase 6G, reused as-is) → AI interpretation
- * (Phase 4/5/6H). This module owns none of that context assembly or
- * retrieval logic — it only gathers what those modules already produced,
- * calls the provider, and validates what comes back.
+ * (Phase 4/5/6H) → durable persistence (Phase 7F-C). This module owns none
+ * of the context assembly or retrieval logic — it only gathers what those
+ * modules already produced, calls the provider, validates what comes back,
+ * and persists the final trusted result via persistAndRespond below.
  *
- * Nothing here is persisted: every call re-generates a fresh interpretation
- * from the current operational facts (and, for the Python-routed path,
- * current knowledge). Ephemeral by design for this phase.
+ * Every call still re-generates a fresh interpretation from the current
+ * operational facts (and, for the Python-routed path, current knowledge) —
+ * generation itself is not cached or deduplicated (see the Phase 7F-C
+ * duplicate/idempotency analysis in the implementation report). What
+ * changed in Phase 7F-C is that the trusted result of each generation is
+ * now saved as its own Intelligence record, not that repeated generation
+ * requests are collapsed into one.
  *
  * `LLM_PROVIDER=openai` and `LLM_PROVIDER=test` still flow through
  * llmProvider.js, which as of Phase 5 Step 5 owns only those two providers
@@ -49,6 +55,49 @@ const PYTHON_ROUTED_PROVIDERS = new Set(["gemini", "test-python"]);
  * than assuming either one, since Python — not Node — knows which of its
  * own code paths it ran.
  */
+/**
+ * Phase 7F-C — persists the final, already-trusted intelligence result and
+ * shapes the HTTP response. Called only after every validation/provenance-
+ * trust step for the calling branch has already completed — this function
+ * never receives raw Python/Gemini output. Persistence failure is never
+ * swallowed: if createGeneratedIntelligence throws, this function throws
+ * too, and the caller (signalController.js's asyncHandler) surfaces it as a
+ * server error — the endpoint must never return a 200 with an intelligence
+ * body that was not actually saved.
+ *
+ * The response keeps the exact flat contract this endpoint already returned
+ * before this phase (summary/findings/risk/decision/action/outcome/
+ * confidence/knowledgeProvenance/provenance) and only adds `_id`/
+ * `createdAt` — the persisted record's durable identity — so existing
+ * callers/tests that only assert the pre-existing fields are unaffected.
+ */
+async function persistAndRespond(scope, context, intelligence, provenance) {
+  const guestId = context.guest?.available ? context.guest.id : undefined;
+  const stayId = context.stay?.available ? context.stay.id : undefined;
+
+  const saved = await createGeneratedIntelligence({
+    workspaceId: scope,
+    signalId: context.signal.id,
+    guestId,
+    stayId,
+    signal: {
+      summary: context.signal.title,
+      type: context.signal.type,
+      severity: context.signal.severity,
+    },
+    result: intelligence,
+    provider: provenance.provider,
+    model: provenance.model,
+  });
+
+  return {
+    ...intelligence,
+    _id: saved._id,
+    createdAt: saved.createdAt,
+    provenance,
+  };
+}
+
 export async function generateSignalIntelligence(signalId, workspaceId, { testScenario } = {}) {
   const scope = requireObjectId(workspaceId, "workspaceId");
   const id = requireObjectId(signalId, "id");
@@ -78,11 +127,12 @@ export async function generateSignalIntelligence(signalId, workspaceId, { testSc
       eligibleChunkIds.has(item.chunkId),
     );
 
-    return {
-      ...intelligence,
-      knowledgeProvenance: trustedKnowledgeProvenance,
-      provenance: { provider: pyProvider || "python", model: model || "unknown" },
-    };
+    return persistAndRespond(
+      scope,
+      context,
+      { ...intelligence, knowledgeProvenance: trustedKnowledgeProvenance },
+      { provider: pyProvider || "python", model: model || "unknown" },
+    );
   }
 
   if (!isAiConfigured()) {
@@ -94,10 +144,7 @@ export async function generateSignalIntelligence(signalId, workspaceId, { testSc
   const intelligence = validateIntelligenceResult(raw);
   const { provider: activeProvider } = getActiveProviderInfo();
 
-  return {
-    ...intelligence,
-    provenance: { provider: activeProvider, model },
-  };
+  return persistAndRespond(scope, context, intelligence, { provider: activeProvider, model });
 }
 
 /**

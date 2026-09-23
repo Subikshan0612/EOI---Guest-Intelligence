@@ -37,6 +37,7 @@ import {
   Signal,
   KnowledgeDocument,
   KnowledgeChunk,
+  Intelligence,
 } from "../src/models/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -150,6 +151,9 @@ async function createSignal(body) {
 
 async function cleanup() {
   await connectDatabase();
+  // Phase 7F-C — every successful generate call now persists an
+  // Intelligence record; clean those up too, scoped by workspaceId.
+  await Intelligence.deleteMany({ workspaceId: { $in: created.workspaceIds } });
   await KnowledgeChunk.deleteMany({ documentId: { $in: created.knowledgeDocumentIds } });
   await KnowledgeDocument.deleteMany({ _id: { $in: created.knowledgeDocumentIds } });
   await Signal.deleteMany({ _id: { $in: created.signalIds } });
