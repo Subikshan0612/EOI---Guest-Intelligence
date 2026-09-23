@@ -22,6 +22,13 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// Phase 7F-D4: jszip is not a direct dependency of this project — it is
+// mammoth's own hard-pinned direct dependency (mammoth cannot function
+// without unzipping a .docx at all, so this is about as stable a
+// transitive dependency as exists) and is used here ONLY to build valid
+// DOCX byte fixtures for these tests, the same way earlier phases hand-
+// built minimal PDF byte fixtures without adding a PDF-writing dependency.
+import JSZip from "jszip";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
 import { Workspace, Property, Unit, Signal, KnowledgeDocument, KnowledgeChunk, Intelligence } from "../src/models/index.js";
 
@@ -199,6 +206,117 @@ function buildEncryptedPdf() {
   }
   const trailer = `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Encrypt 6 0 R /ID [(1234567890123456) (1234567890123456)] >>\nstartxref\n${xrefOffset}\n%%EOF`;
   return Buffer.from(body + xref + trailer, "utf8");
+}
+
+/**
+ * Phase 7F-D4 — hand-built, minimal, valid DOCX (OOXML-in-ZIP) fixtures
+ * using jszip directly (see the import above). `bodyXml` is the raw
+ * `<w:body>...</w:body>` inner content; `extraParts` optionally adds a
+ * numbering.xml (required for a real <ul>/<ol> list — verified directly:
+ * without it, mammoth silently renders list paragraphs as plain <p>, not
+ * <li>), a header/footer pair, and a footnotes part + its relationship.
+ */
+async function buildDocx(bodyXml, { withNumbering = false, withHeaderFooter = false, withFootnote = false, withHyperlink = false } = {}) {
+  const zip = new JSZip();
+  const overrides = [
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>',
+  ];
+  const docRels = [
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>',
+  ];
+
+  if (withNumbering) {
+    overrides.push('<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>');
+    zip.folder("word").file(
+      "numbering.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="&#8226;"/></w:lvl></w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>`,
+    );
+  }
+
+  if (withHeaderFooter) {
+    overrides.push('<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>');
+    overrides.push('<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>');
+    docRels.push('<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>');
+    docRels.push('<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>');
+    zip.folder("word").file("header1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>HEADER TEXT MARKER</w:t></w:r></w:p></w:hdr>`);
+    zip.folder("word").file("footer1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>FOOTER TEXT MARKER</w:t></w:r></w:p></w:ftr>`);
+  }
+
+  if (withFootnote) {
+    overrides.push('<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>');
+    docRels.push('<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>');
+    zip.folder("word").file(
+      "footnotes.xml",
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:footnote w:id="1"><w:p><w:r><w:t>FOOTNOTE TEXT MARKER</w:t></w:r></w:p></w:footnote>
+</w:footnotes>`,
+    );
+  }
+
+  if (withHyperlink) {
+    docRels.push('<Relationship Id="rIdLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/policy" TargetMode="External"/>');
+  }
+
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+${overrides.join("\n")}
+</Types>`,
+  );
+  zip.folder("_rels").file(
+    ".rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,
+  );
+  zip.folder("word").folder("_rels").file(
+    "document.xml.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${docRels.slice(1).join("\n")}
+</Relationships>`,
+  );
+  zip.folder("word").file(
+    "document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<w:body>${bodyXml}</w:body>
+</w:document>`,
+  );
+
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+function paragraph(text) {
+  return `<w:p><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
+}
+
+function heading(level, text) {
+  return `<w:p><w:pPr><w:pStyle w:val="Heading${level}"/></w:pPr><w:r><w:t>${text}</w:t></w:r></w:p>`;
+}
+
+function listItem(text) {
+  return `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>${text}</w:t></w:r></w:p>`;
+}
+
+function hyperlinkParagraph(displayText) {
+  return `<w:p><w:hyperlink r:id="rIdLink"><w:r><w:t>${displayText}</w:t></w:r></w:hyperlink></w:p>`;
+}
+
+function table(rows) {
+  const rowsXml = rows
+    .map((cells) => `<w:tr>${cells.map((cell) => `<w:tc><w:p><w:r><w:t>${cell}</w:t></w:r></w:p></w:tc>`).join("")}</w:tr>`)
+    .join("");
+  return `<w:tbl>${rowsXml}</w:tbl>`;
 }
 
 /**
@@ -997,6 +1115,322 @@ async function main() {
   trackCreated(mdRegressionRes, "knowledgeDocumentIds");
   if (mdRegressionRes.json?.data?.sourceType === "md-upload") ok("7FD3.14: Markdown sourceType unaffected");
   else fail("7FD3.14: Markdown sourceType unaffected", JSON.stringify(mdRegressionRes.json?.data));
+
+  // =========================================================
+  // Phase 7F-D4: DOCX ingestion. Reuses the exact same upload endpoint,
+  // metadata behavior, duplicate detection, supersession, ingestion-status
+  // machinery, and retrieval/RAG pipeline every TXT/Markdown/PDF test above
+  // already exercises — this section only proves the new DOCX-specific
+  // extraction path (documentExtractor.js's extractDocxText +
+  // htmlToPlainText) behaves correctly.
+  // =========================================================
+
+  // --- 1: normal DOCX paragraphs ---
+  const docxParaText = `Example only. DOCX upload content ${stamp}.`;
+  const normalDocxBuffer = await buildDocx(paragraph(docxParaText));
+  const normalDocxRes = await expectUploadStatus(
+    "7FD4.1: DOCX with normal paragraphs upload succeeds",
+    { fields: { workspaceId: wsA, title: "Example: Normal DOCX", documentType: "sop", isTestData: "true" }, fileBytes: normalDocxBuffer, filename: "normal.docx" },
+    201,
+  );
+  const normalDocxId = trackCreated(normalDocxRes, "knowledgeDocumentIds");
+  if (normalDocxRes.json?.data?.sourceType === "docx-upload") ok("7FD4.1: sourceType is docx-upload");
+  else fail("7FD4.1: sourceType is docx-upload", JSON.stringify(normalDocxRes.json?.data));
+  if (typeof normalDocxRes.json?.data?.content === "string" && normalDocxRes.json.data.content.includes(docxParaText)) {
+    ok("7FD4.1: persisted KnowledgeDocument.content contains readable extracted text");
+  } else {
+    fail("7FD4.1: persisted KnowledgeDocument.content contains readable extracted text", JSON.stringify(normalDocxRes.json?.data?.content));
+  }
+  const normalDocxAfter = await request("GET", `/knowledge-documents/${normalDocxId}?workspaceId=${wsA}`);
+  if (normalDocxAfter.json?.data?.ingestionStatus === "ready") ok("7FD4.1: document reaches ingestionStatus:ready");
+  else fail("7FD4.1: document reaches ingestionStatus:ready", JSON.stringify(normalDocxAfter.json?.data));
+
+  // --- 2: headings ---
+  const headingDocxBuffer = await buildDocx(heading(1, "Escalation Procedure") + heading(2, "Step One") + paragraph("Body text under the heading."));
+  const headingDocxRes = await expectUploadStatus(
+    "7FD4.2: DOCX with headings upload succeeds",
+    { fields: { workspaceId: wsA, title: "Example: DOCX Headings", documentType: "sop", isTestData: "true" }, fileBytes: headingDocxBuffer, filename: "headings.docx" },
+    201,
+  );
+  const headingDocxId = trackCreated(headingDocxRes, "knowledgeDocumentIds");
+  const headingDocxContent = headingDocxRes.json?.data?.content || "";
+  if (headingDocxContent.includes("# Escalation Procedure")) ok('7FD4.2: Heading 1 becomes "# ..."');
+  else fail('7FD4.2: Heading 1 becomes "# ..."', JSON.stringify(headingDocxContent));
+  if (headingDocxContent.includes("## Step One")) ok('7FD4.2: Heading 2 becomes "## ..."');
+  else fail('7FD4.2: Heading 2 becomes "## ..."', JSON.stringify(headingDocxContent));
+  await expectStatus("7FD4.2: chunk the heading document", "POST", `/knowledge-documents/${headingDocxId}/chunks?workspaceId=${wsA}`, null, 201);
+  const headingChunksRes = await request("GET", `/knowledge-documents/${headingDocxId}/chunks?workspaceId=${wsA}`);
+  const headingSections = (headingChunksRes.json?.data || []).map((c) => c.section);
+  if (headingSections.includes("Escalation Procedure") || headingSections.includes("Step One")) {
+    ok("7FD4.2: persisted chunks retain heading structure via the existing chunker's heading detection");
+  } else {
+    fail("7FD4.2: persisted chunks retain heading structure via the existing chunker's heading detection", JSON.stringify(headingSections));
+  }
+
+  // --- 3: lists ---
+  const listDocxBuffer = await buildDocx(heading(2, "Steps") + listItem("Check the thermostat") + listItem("Escalate to on-call staff"), { withNumbering: true });
+  const listDocxRes = await expectUploadStatus(
+    "7FD4.3: DOCX with a list upload succeeds",
+    { fields: { workspaceId: wsA, title: "Example: DOCX List", documentType: "sop", isTestData: "true" }, fileBytes: listDocxBuffer, filename: "list.docx" },
+    201,
+  );
+  trackCreated(listDocxRes, "knowledgeDocumentIds");
+  const listContent = listDocxRes.json?.data?.content || "";
+  if (listContent.includes("- Check the thermostat") && listContent.includes("- Escalate to on-call staff")) {
+    ok('7FD4.3: list items become readable "- " lines, content preserved');
+  } else {
+    fail('7FD4.3: list items become readable "- " lines, content preserved', JSON.stringify(listContent));
+  }
+
+  // --- 4: tables ---
+  const tableDocxBuffer = await buildDocx(paragraph("Unit status:") + table([["Room", "Status"], ["204", "Occupied"]]));
+  const tableDocxRes = await expectUploadStatus(
+    "7FD4.4: DOCX with a table upload succeeds",
+    { fields: { workspaceId: wsA, title: "Example: DOCX Table", documentType: "guideline", isTestData: "true" }, fileBytes: tableDocxBuffer, filename: "table.docx" },
+    201,
+  );
+  trackCreated(tableDocxRes, "knowledgeDocumentIds");
+  const tableContent = tableDocxRes.json?.data?.content || "";
+  if (["Room", "Status", "204", "Occupied"].every((cell) => tableContent.includes(cell))) {
+    ok("7FD4.4: table cell textual content is present in extracted text");
+  } else {
+    fail("7FD4.4: table cell textual content is present in extracted text", JSON.stringify(tableContent));
+  }
+  if (!/<w?:?tbl|<table|<tr>|<td>/i.test(tableContent)) {
+    ok("7FD4.4: no structured table markup/model leaks into the stored content (flattened text only)");
+  } else {
+    fail("7FD4.4: no structured table markup/model leaks into the stored content", JSON.stringify(tableContent));
+  }
+
+  // --- 5: hyperlinks ---
+  const hyperlinkDocxBuffer = await buildDocx(hyperlinkParagraph("Escalation Policy Document"), { withHyperlink: true });
+  const hyperlinkDocxRes = await expectUploadStatus(
+    "7FD4.5: DOCX with a hyperlink upload succeeds",
+    { fields: { workspaceId: wsA, title: "Example: DOCX Hyperlink", documentType: "guideline", isTestData: "true" }, fileBytes: hyperlinkDocxBuffer, filename: "hyperlink.docx" },
+    201,
+  );
+  trackCreated(hyperlinkDocxRes, "knowledgeDocumentIds");
+  const hyperlinkContent = hyperlinkDocxRes.json?.data?.content || "";
+  if (hyperlinkContent.includes("Escalation Policy Document") && !hyperlinkContent.includes("example.com")) {
+    ok("7FD4.5: hyperlink visible text is preserved; the raw URL itself is not");
+  } else {
+    fail("7FD4.5: hyperlink visible text is preserved", JSON.stringify(hyperlinkContent));
+  }
+
+  // --- 6: malformed DOCX ---
+  const malformedDocxRes = await expectUploadStatus(
+    "7FD4.6: malformed DOCX (garbage bytes, .docx extension) rejected",
+    { fields: { workspaceId: wsA, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: "this is not a docx at all, just garbage bytes pretending to be one", filename: "malformed.docx" },
+    400,
+  );
+  if (malformedDocxRes.status !== 500) ok("7FD4.6: malformed DOCX never returns 500");
+  else fail("7FD4.6: malformed DOCX never returns 500");
+  const malformedDocxMessage = JSON.stringify(malformedDocxRes.json);
+  if (!secretPattern.test(malformedDocxMessage) && !/xmldom|jszip|node_modules/i.test(malformedDocxMessage)) {
+    ok("7FD4.6: malformed-DOCX error exposes no internal parser/library implementation detail");
+  } else {
+    fail("7FD4.6: malformed-DOCX error exposes no internal parser/library implementation detail", malformedDocxMessage);
+  }
+
+  // --- 7: non-DOCX file renamed .docx (a valid ZIP, but not a DOCX structure) ---
+  const notReallyDocxZip = new JSZip();
+  notReallyDocxZip.file("hello.txt", "just a regular zip file, not a docx");
+  const notReallyDocxBuffer = await notReallyDocxZip.generateAsync({ type: "nodebuffer" });
+  await expectUploadStatus(
+    "7FD4.7: a valid ZIP that is not a real DOCX structure is rejected",
+    { fields: { workspaceId: wsA, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: notReallyDocxBuffer, filename: "not-a-docx.docx" },
+    400,
+  );
+
+  // --- 8: empty DOCX ---
+  const emptyDocxBuffer = await buildDocx("");
+  const emptyDocxRes = await expectUploadStatus(
+    "7FD4.8: empty DOCX (no paragraphs) rejected via the existing content validation path",
+    { fields: { workspaceId: wsA, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: emptyDocxBuffer, filename: "empty.docx" },
+    400,
+  );
+  if (typeof emptyDocxRes.json?.message === "string" && emptyDocxRes.json.message.includes("content is required")) {
+    ok("7FD4.8: rejected with the exact same message an empty TXT upload already gets — no new/duplicate validation logic");
+  } else {
+    fail("7FD4.8: rejected with the exact same message an empty TXT upload already gets", JSON.stringify(emptyDocxRes.json));
+  }
+
+  // --- 9: image-only DOCX (a paragraph with no text run at all — the
+  // closest deterministic stand-in for "only an image", since an actual
+  // embedded image requires binary image bytes; the code path that
+  // matters — zero extracted text — is identical either way). ---
+  const imageOnlyDocxBuffer = await buildDocx('<w:p><w:r><w:t></w:t></w:r></w:p>');
+  const imageOnlyDocxRes = await expectUploadStatus(
+    "7FD4.9: image-only DOCX (no extractable text) rejected, no OCR performed",
+    { fields: { workspaceId: wsA, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: imageOnlyDocxBuffer, filename: "image-only.docx" },
+    400,
+  );
+  if (typeof imageOnlyDocxRes.json?.message === "string" && imageOnlyDocxRes.json.message.includes("content is required")) {
+    ok("7FD4.9: image-only DOCX rejected via the same existing empty-content path, not a new OCR/image code path");
+  } else {
+    fail("7FD4.9: image-only DOCX rejected via the same existing empty-content path", JSON.stringify(imageOnlyDocxRes.json));
+  }
+
+  // --- 10: large DOCX under 10 MB ---
+  const manyParagraphs = Array.from({ length: 2000 }, (_, i) => paragraph(`Paragraph number ${i} of a larger operational document ${stamp}.`)).join("");
+  const largeDocxBuffer = await buildDocx(manyParagraphs);
+  if (largeDocxBuffer.length < 10 * 1024 * 1024) {
+    ok(`7FD4.10: the larger DOCX fixture is well under 10 MB (${largeDocxBuffer.length} bytes) as intended`);
+  } else {
+    fail(`7FD4.10: the larger DOCX fixture is well under 10 MB`, `${largeDocxBuffer.length} bytes`);
+  }
+  const largeDocxRes = await expectUploadStatus(
+    "7FD4.10: a larger DOCX (well under 10 MB) with valid text succeeds",
+    { fields: { workspaceId: wsA, title: "Example: Large DOCX", documentType: "guideline", isTestData: "true" }, fileBytes: largeDocxBuffer, filename: "large.docx" },
+    201,
+  );
+  trackCreated(largeDocxRes, "knowledgeDocumentIds");
+
+  // --- 11: duplicate DOCX content -> 409 ---
+  const docxDupContent = `Example only. DOCX duplicate check ${stamp}.`;
+  const docxDupFirstRes = await expectUploadStatus(
+    "7FD4.11: first real DOCX upload with this content succeeds",
+    { fields: { workspaceId: wsA, title: "Example: DOCX dup source", documentType: "policy", isTestData: "false" }, fileBytes: await buildDocx(paragraph(docxDupContent)), filename: "docx-dup-1.docx" },
+    201,
+  );
+  const docxDupFirstId = trackCreated(docxDupFirstRes, "knowledgeDocumentIds");
+  await expectUploadStatus(
+    "7FD4.11: identical DOCX content, same workspace/scope -> 409 duplicate",
+    { fields: { workspaceId: wsA, title: "Example: DOCX dup attempt", documentType: "policy", isTestData: "false" }, fileBytes: await buildDocx(paragraph(docxDupContent)), filename: "docx-dup-2.docx" },
+    409,
+  );
+
+  // --- 12: cross-format duplicate — DOCX extracted text identical to an
+  // existing TXT document's content -> 409. ---
+  const crossFormatDocxContent = `Example only. Cross-format DOCX duplicate check ${stamp}.`;
+  const txtCrossSourceRes = await expectUploadStatus(
+    "7FD4.12: TXT upload establishing the DOCX cross-format duplicate source",
+    { fields: { workspaceId: wsA, title: "Example: TXT dup source for DOCX", documentType: "policy", isTestData: "false" }, fileBytes: crossFormatDocxContent, filename: "cross-format-for-docx.txt" },
+    201,
+  );
+  const txtCrossSourceId = trackCreated(txtCrossSourceRes, "knowledgeDocumentIds");
+  await expectUploadStatus(
+    "7FD4.12: DOCX whose extracted text matches an existing TXT document's content -> 409 duplicate",
+    { fields: { workspaceId: wsA, title: "Example: DOCX cross-format dup attempt", documentType: "policy", isTestData: "false" }, fileBytes: await buildDocx(paragraph(crossFormatDocxContent)), filename: "cross-format.docx" },
+    409,
+  );
+
+  await connectDatabase();
+  await KnowledgeDocument.deleteMany({ _id: { $in: [docxDupFirstId, txtCrossSourceId] } });
+  await disconnectDatabase();
+
+  // --- 13: embedding failure after successful DOCX extraction ---
+  await withEphemeralServer(5099, { AI_SERVICE_URL: "http://localhost:5999" }, async (ephemeralBase) => {
+    const docxFailRes = await upload({
+      baseUrl: ephemeralBase,
+      fields: { workspaceId: wsA, title: "Example: DOCX with forced ingestion failure", documentType: "guideline", isTestData: "true" },
+      fileBytes: await buildDocx(paragraph(`Example only. DOCX ingestion failure check ${stamp}.`)),
+      filename: "docx-forced-failure.docx",
+    });
+    if (docxFailRes.status === 502) ok("7FD4.13: a DOCX upload whose embedding step genuinely fails still returns the existing 502 behavior, unchanged");
+    else fail("7FD4.13: a DOCX upload whose embedding step genuinely fails still returns the existing 502 behavior", `status=${docxFailRes.status}`);
+
+    const docxFailedId = docxFailRes.json?.details?.knowledgeDocumentId;
+    if (typeof docxFailedId === "string" && docxFailedId.length === 24) {
+      ok("7FD4.13: the failed DOCX upload's error response carries the already-created document's id in `details`");
+      trackCreated({ json: { data: { _id: docxFailedId } } }, "knowledgeDocumentIds");
+
+      await connectDatabase();
+      const docxFailedDoc = await KnowledgeDocument.findById(docxFailedId);
+      await disconnectDatabase();
+      if (docxFailedDoc?.ingestionStatus === "failed" && typeof docxFailedDoc?.ingestionError === "string" && !secretPattern.test(docxFailedDoc.ingestionError)) {
+        ok("7FD4.13: the document is independently observable as ingestionStatus:failed with a safe ingestionError");
+      } else {
+        fail("7FD4.13: the document is independently observable as ingestionStatus:failed with a safe ingestionError", JSON.stringify({ status: docxFailedDoc?.ingestionStatus, error: docxFailedDoc?.ingestionError }));
+      }
+
+      await expectStatus("7FD4.13: retry — re-chunk the failed DOCX document", "POST", `/knowledge-documents/${docxFailedId}/chunks?workspaceId=${wsA}`, null, 201);
+      await expectStatus("7FD4.13: retry — re-embed the failed DOCX document", "POST", `/knowledge-documents/${docxFailedId}/embeddings?workspaceId=${wsA}`, null, 201);
+      const docxRecovered = await request("GET", `/knowledge-documents/${docxFailedId}?workspaceId=${wsA}`);
+      if (docxRecovered.json?.data?.ingestionStatus === "ready") ok("7FD4.13: the existing chunk/embed retry endpoints recover a failed DOCX document to ready, same as TXT/MD/PDF");
+      else fail("7FD4.13: the existing chunk/embed retry endpoints recover a failed DOCX document to ready", JSON.stringify(docxRecovered.json?.data));
+    } else {
+      fail("7FD4.13: the failed DOCX upload's error response carries the already-created document's id in `details`", JSON.stringify(docxFailRes.json));
+    }
+  });
+
+  // --- 14: extracted-text ceiling ---
+  await connectDatabase();
+  const beforeDocxCeilingCount = await KnowledgeDocument.countDocuments({ workspaceId: wsA });
+  await disconnectDatabase();
+  const overCeilingParagraphs = Array.from({ length: 7000 }, (_, i) => paragraph(`x`.repeat(80) + ` line ${i}`)).join("");
+  const overCeilingDocxBuffer = await buildDocx(overCeilingParagraphs);
+  const overCeilingDocxRes = await expectUploadStatus(
+    "7FD4.14: a DOCX whose extracted text exceeds the configured ceiling is rejected",
+    { fields: { workspaceId: wsA, title: "Example: Over-ceiling DOCX", documentType: "guideline", isTestData: "true" }, fileBytes: overCeilingDocxBuffer, filename: "over-ceiling.docx" },
+    400,
+  );
+  if (typeof overCeilingDocxRes.json?.message === "string" && overCeilingDocxRes.json.message.includes("exceeds the maximum supported length")) {
+    ok("7FD4.14: the ceiling rejection carries a clear, specific message");
+  } else {
+    fail("7FD4.14: the ceiling rejection carries a clear, specific message", JSON.stringify(overCeilingDocxRes.json));
+  }
+  await connectDatabase();
+  const afterDocxCeilingCount = await KnowledgeDocument.countDocuments({ workspaceId: wsA });
+  await disconnectDatabase();
+  if (afterDocxCeilingCount === beforeDocxCeilingCount) ok("7FD4.14: no partial KnowledgeDocument was created when the ceiling was exceeded");
+  else fail("7FD4.14: no partial KnowledgeDocument was created when the ceiling was exceeded", `before=${beforeDocxCeilingCount} after=${afterDocxCeilingCount}`);
+
+  // --- 15: unsupported extension regression ---
+  await expectUploadStatus(
+    "7FD4.15: unsupported extension (.xlsx) still rejected after DOCX support was added",
+    { fields: { workspaceId: wsA, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: "irrelevant", filename: "spreadsheet.xlsx" },
+    400,
+  );
+
+  // --- 16: regression — TXT/MD/PDF still work ---
+  const finalTxtRes = await expectUploadStatus(
+    "7FD4.16: TXT upload still works unchanged after DOCX support was added",
+    { fields: { workspaceId: wsA, title: "Example: TXT still works (post-DOCX)", documentType: "guideline", isTestData: "true" }, fileBytes: `Example only. TXT still works post-DOCX ${stamp}.`, filename: "post-docx.txt" },
+    201,
+  );
+  trackCreated(finalTxtRes, "knowledgeDocumentIds");
+  const finalMdRes = await expectUploadStatus(
+    "7FD4.16: Markdown upload still works unchanged after DOCX support was added",
+    { fields: { workspaceId: wsA, title: "Example: MD still works (post-DOCX)", documentType: "guideline", isTestData: "true" }, fileBytes: `# Example ${stamp}\n\nStill works post-DOCX.`, filename: "post-docx.md" },
+    201,
+  );
+  trackCreated(finalMdRes, "knowledgeDocumentIds");
+  const finalPdfRes = await expectUploadStatus(
+    "7FD4.16: PDF upload still works unchanged after DOCX support was added",
+    { fields: { workspaceId: wsA, title: "Example: PDF still works (post-DOCX)", documentType: "guideline", isTestData: "true" }, fileBytes: buildMinimalPdf(`Example only. PDF still works post-DOCX ${stamp}.`), filename: "post-docx.pdf" },
+    201,
+  );
+  trackCreated(finalPdfRes, "knowledgeDocumentIds");
+  if (finalTxtRes.json?.data?.sourceType === "txt-upload" && finalMdRes.json?.data?.sourceType === "md-upload" && finalPdfRes.json?.data?.sourceType === "pdf-upload") {
+    ok("7FD4.16: TXT/MD/PDF sourceTypes all remain correct and unaffected by adding DOCX support");
+  } else {
+    fail("7FD4.16: TXT/MD/PDF sourceTypes all remain correct and unaffected", JSON.stringify({ txt: finalTxtRes.json?.data?.sourceType, md: finalMdRes.json?.data?.sourceType, pdf: finalPdfRes.json?.data?.sourceType }));
+  }
+
+  // --- 17: verify actual mammoth behavior for headers/footers/footnotes,
+  // documented rather than elaborately supported. ---
+  const headerFooterFootnoteDocxBuffer = await buildDocx(
+    paragraph("Body paragraph with a footnote.") + '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>',
+    { withHeaderFooter: true, withFootnote: true },
+  );
+  const headerFooterFootnoteRes = await expectUploadStatus(
+    "7FD4.17: DOCX with header/footer/footnote parts uploads successfully",
+    { fields: { workspaceId: wsA, title: "Example: DOCX header/footer/footnote", documentType: "guideline", isTestData: "true" }, fileBytes: headerFooterFootnoteDocxBuffer, filename: "header-footer-footnote.docx" },
+    201,
+  );
+  trackCreated(headerFooterFootnoteRes, "knowledgeDocumentIds");
+  const hffContent = headerFooterFootnoteRes.json?.data?.content || "";
+  if (!hffContent.includes("HEADER TEXT MARKER") && !hffContent.includes("FOOTER TEXT MARKER")) {
+    ok("7FD4.17: VERIFIED — mammoth does not include header/footer content in extracted text (documented, not supported)");
+  } else {
+    fail("7FD4.17: expected header/footer content to be absent (documenting actual observed behavior)", JSON.stringify(hffContent));
+  }
+  if (hffContent.includes("FOOTNOTE TEXT MARKER")) {
+    ok("7FD4.17: VERIFIED — footnote text content IS included in extracted text (via mammoth's trailing footnote list), documented as observed behavior");
+  } else {
+    fail("7FD4.17: expected footnote text content to be present (documenting actual observed behavior)", JSON.stringify(hffContent));
+  }
 
   await cleanup();
   ok("mongodb cleanup");

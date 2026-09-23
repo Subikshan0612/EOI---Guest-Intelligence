@@ -1,22 +1,23 @@
 import { PDFParse, PasswordException } from "pdf-parse";
+import mammoth from "mammoth";
 import { AppError } from "../../utils/AppError.js";
 
 /**
- * Phase 7F-D2/7F-D3 — the only Node-side file-ingestion module. Responsible
- * for exactly three things: deciding whether a filename's extension is a
- * supported format, turning an uploaded file's raw bytes into deterministic
- * canonical text, and sanitizing the filename kept as metadata. Nothing
- * here touches MongoDB, HTTP, or the knowledge/chunking/embedding
- * pipeline — those stay entirely in knowledgeDocumentController.js and the
- * existing services it already calls.
+ * Phase 7F-D2/7F-D3/7F-D4 — the only Node-side file-ingestion module.
+ * Responsible for exactly three things: deciding whether a filename's
+ * extension is a supported format, turning an uploaded file's raw bytes
+ * into deterministic canonical text, and sanitizing the filename kept as
+ * metadata. Nothing here touches MongoDB, HTTP, or the knowledge/chunking/
+ * embedding pipeline — those stay entirely in knowledgeDocumentController.js
+ * and the existing services it already calls.
  *
- * DOCX support is deliberately not here yet. The shape this module
- * exposes — extension → sourceType, and a single extractDocumentText()
- * entry point returning {text, sourceType} — is designed so a future
- * format only needs a new branch inside this same module, never a change
- * to the upload controller itself (the controller's own call site now
- * awaits this function, since PDF parsing is inherently asynchronous —
- * the one necessary change outside this file).
+ * The shape this module exposes — extension → sourceType, and a single
+ * extractDocumentText() entry point returning {text, sourceType} — is
+ * designed so a future format only needs a new branch inside this same
+ * module, never a change to the upload controller itself. DOCX (7F-D4) is
+ * the first format to prove this out: it needed zero controller changes,
+ * since extractDocumentText() was already made async for PDF (7F-D3) and
+ * mammoth's own API is also promise-based.
  */
 
 // Adding a format means adding an entry here and a corresponding
@@ -26,22 +27,24 @@ const EXTENSION_SOURCE_TYPES = {
   ".md": "md-upload",
   ".markdown": "md-upload",
   ".pdf": "pdf-upload",
+  ".docx": "docx-upload",
 };
 
 /**
- * Phase 7F-D3 — a PDF's compressed (uploaded) byte size does not bound its
- * decompressed/extracted text size the way it does for a plain TXT/MD file
- * (where content size == file size, 1:1) — a PDF well within the existing
- * 10 MB upload limit could still, in principle, decompress into far more
- * text than that limit would suggest. This ceiling is deliberately
- * generous for any realistic single SOP/policy document — roughly 150-250
- * pages of dense single-spaced text, far beyond what one such document
- * would ever realistically contain — while still bounding worst-case
- * memory/processing from a pathological input. Applies only to the PDF
- * path: TXT/MD content size is already directly bounded by the 10 MB
+ * Phase 7F-D3, generalized in 7F-D4 — neither a PDF's nor a DOCX's
+ * compressed (uploaded) byte size bounds its decompressed/extracted text
+ * size the way it does for a plain TXT/MD file (where content size == file
+ * size, 1:1) — a file well within the existing 10 MB upload limit could
+ * still, in principle, decompress/render into far more text than that
+ * limit would suggest. This ceiling is deliberately generous for any
+ * realistic single SOP/policy document — roughly 150-250 pages of dense
+ * single-spaced text, far beyond what one such document would ever
+ * realistically contain — while still bounding worst-case memory/
+ * processing from a pathological input. Applies only to the PDF and DOCX
+ * paths: TXT/MD content size is already directly bounded by the 10 MB
  * upload limit itself, so a separate ceiling there would be redundant.
  */
-const MAX_PDF_EXTRACTED_TEXT_CHARS = 500_000;
+const MAX_EXTRACTED_TEXT_CHARS = 500_000;
 
 function getExtension(filename) {
   const match = /\.[^./\\]+$/.exec(filename || "");
@@ -59,7 +62,7 @@ export function sourceTypeForFilename(filename) {
   const sourceType = EXTENSION_SOURCE_TYPES[extension];
   if (!sourceType) {
     throw new AppError(
-      `Unsupported file extension "${extension || "(none)"}" — supported: .txt, .md, .markdown`,
+      `Unsupported file extension "${extension || "(none)"}" — supported: .txt, .md, .markdown, .pdf, .docx`,
       400,
     );
   }
@@ -145,13 +148,13 @@ async function extractPdfText(buffer) {
     // actually blank/whitespace-only.
     const text = result.pages.map((page) => page.text).join("\n\n");
 
-    if (text.length > MAX_PDF_EXTRACTED_TEXT_CHARS) {
+    if (text.length > MAX_EXTRACTED_TEXT_CHARS) {
       // Deliberately not .toLocaleString() — it formats using the
       // server's own system locale (e.g. Indian digit grouping,
       // "5,00,000"), which is inconsistent/surprising in an API error
       // message. A plain number is unambiguous everywhere.
       throw new AppError(
-        `PDF extracted text exceeds the maximum supported length (${MAX_PDF_EXTRACTED_TEXT_CHARS} characters)`,
+        `PDF extracted text exceeds the maximum supported length (${MAX_EXTRACTED_TEXT_CHARS} characters)`,
         400,
       );
     }
@@ -172,21 +175,151 @@ async function extractPdfText(buffer) {
 }
 
 /**
+ * Phase 7F-D4 — the markdown-style prefix for each heading level this
+ * converter recognizes. Exactly the approved mapping, nothing more.
+ */
+const HEADING_PREFIXES = { h1: "# ", h2: "## ", h3: "### ", h4: "#### ", h5: "##### ", h6: "###### " };
+
+/**
+ * Phase 7F-D4 — a small, deterministic HTML-to-text converter, NOT a
+ * general-purpose HTML renderer. It recognizes exactly the approved set of
+ * tags (h1-h6, li, p, br) to decide where line breaks and markdown-style
+ * prefixes go; every other tag (a, sup, table, tr, td, ul, ol, strong, em,
+ * ...) is stripped while its inner text is kept — this is what makes
+ * hyperlinks preserve their visible text and table cells preserve their
+ * textual content with zero special-casing per tag, exactly matching the
+ * approved "strip all remaining formatting markup" rule without needing a
+ * real DOM parser or a new dependency.
+ *
+ * Verified against mammoth's own real output (not assumed) before writing
+ * this: mammoth already renders headings/lists/tables/hyperlinks/footnotes
+ * as clean, simple HTML with no attributes this function needs to inspect
+ * beyond the tag name itself, so a regex-based pass is sufficient and
+ * correctly bounded in scope — a real DOM parser would be solving a
+ * problem this input shape doesn't have.
+ *
+ * Nested lists are deliberately flattened: every <li> gets the same "- "
+ * prefix regardless of nesting depth, satisfying "remain readable even if
+ * nesting depth is flattened" without tracking nesting state at all.
+ */
+function htmlToPlainText(html) {
+  let text = html;
+
+  // A manual line break (Shift+Enter in Word) inside a paragraph.
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+
+  // Opening tags for the recognized block-level elements start a new line,
+  // with the approved prefix for headings/list items (none for <p>).
+  text = text.replace(/<(h[1-6]|li|p)\b[^>]*>/gi, (_match, tag) => {
+    const lower = tag.toLowerCase();
+    return `\n${HEADING_PREFIXES[lower] || (lower === "li" ? "- " : "")}`;
+  });
+  // Their closing tags just end the line.
+  text = text.replace(/<\/(h[1-6]|li|p)>/gi, "\n");
+
+  // Table/list container boundaries get a line break too, purely for
+  // readability between rows/items — no structure is preserved or implied.
+  text = text.replace(/<\/?(table|tr|ul|ol)\b[^>]*>/gi, "\n");
+
+  // Everything else (a, sup, td, strong, em, ...): strip the tag, keep the
+  // inner text — this is precisely what makes a hyperlink's visible text
+  // and a table cell's text survive with no per-tag handling.
+  text = text.replace(/<[^>]+>/g, "");
+
+  // The small set of HTML entities mammoth's own output can contain.
+  // &amp; is decoded LAST and only once (not recursively), so text that
+  // legitimately contained a literal "&amp;" string is never over-decoded
+  // into "&" — verified directly against mammoth's real output.
+  text = text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+
+  return text;
+}
+
+/**
+ * Phase 7F-D4 — DOCX text extraction via mammoth's real, installed API
+ * (verified directly: `mammoth.convertToHtml({buffer})` returns
+ * `Promise<{value, messages}>` — confirmed against the actual installed
+ * package, not assumed). `convertToHtml` is used rather than
+ * `extractRawText` specifically so heading/list *semantics* survive (via
+ * htmlToPlainText above) — extractRawText would discard which paragraph
+ * was a real "Heading 1", making the existing chunker's heading-detection
+ * blind to DOCX-derived headings.
+ *
+ * `result.messages` (mammoth's own warnings, e.g. about unrecognized
+ * styles) are intentionally never inspected further or surfaced to the
+ * caller — verified directly that a real document still converts
+ * correctly despite such warnings; they are purely informational about
+ * styling gaps, not extraction failures.
+ *
+ * mammoth throws plain `Error` objects for every failure mode (no custom
+ * exception subclasses, unlike pdf-parse) — verified directly against a
+ * non-ZIP file, a ZIP without a real document part, and a document with
+ * malformed internal XML. The malformed-XML case in particular surfaces a
+ * raw internal parser message (mentioning the XML parser's own package
+ * name) — confirming every DOCX failure must collapse to one fixed, safe
+ * message, never `error.message` itself.
+ *
+ * Verified directly (not assumed) and worth documenting plainly:
+ * - Header/footer content is never included in mammoth's output at all,
+ *   under any code path tested — headers/footers are silently excluded.
+ * - Footnote *reference markers* appear inline (as their visible "[n]"
+ *   text); footnote *content* is appended at the very end of the document
+ *   as ordinary list items, which htmlToPlainText's own <li> handling
+ *   picks up like any other list item — no special-casing needed, but the
+ *   footnote's own "back to reference" arrow glyph ends up as trailing
+ *   text on that line, a minor, accepted cosmetic artifact.
+ * - An empty document and a document whose only paragraph has no text run
+ *   both succeed with `value: ""` — mammoth never throws for these; they
+ *   correctly fall through to createKnowledgeDocument's existing
+ *   assertNonBlankContent guard once normalized, exactly as approved.
+ */
+async function extractDocxText(buffer) {
+  let result;
+  try {
+    result = await mammoth.convertToHtml({ buffer });
+  } catch {
+    throw new AppError("File is not a valid DOCX document", 400);
+  }
+
+  const text = htmlToPlainText(result.value);
+
+  if (text.length > MAX_EXTRACTED_TEXT_CHARS) {
+    throw new AppError(
+      `DOCX extracted text exceeds the maximum supported length (${MAX_EXTRACTED_TEXT_CHARS} characters)`,
+      400,
+    );
+  }
+
+  return text;
+}
+
+/**
  * The module's single orchestration entry point. Extension is validated
  * first (cheapest check, no need to touch file bytes for an unsupported
  * format), then the bytes are extracted per-format and normalized through
  * the exact same normalizeText() regardless of source format. Never
  * partially succeeds: any failure throws before returning anything, so a
- * caller never receives a half-processed result. Async because PDF
+ * caller never receives a half-processed result. Async because PDF/DOCX
  * extraction is inherently asynchronous — TXT/Markdown's own behavior
  * (decode -> normalize) is completely unchanged, just now resolved via a
- * Promise like the PDF branch.
+ * Promise like the other branches.
  */
 export async function extractDocumentText({ originalName, buffer }) {
   const sourceType = sourceTypeForFilename(originalName);
 
   if (sourceType === "pdf-upload") {
     const rawText = await extractPdfText(buffer);
+    return { text: normalizeText(rawText), sourceType };
+  }
+
+  if (sourceType === "docx-upload") {
+    const rawText = await extractDocxText(buffer);
     return { text: normalizeText(rawText), sourceType };
   }
 
