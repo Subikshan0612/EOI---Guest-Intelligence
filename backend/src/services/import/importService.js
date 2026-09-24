@@ -19,10 +19,10 @@ import {
   buildDateParser,
   clip,
   mapRow,
-  resolveStatus,
   validateMappingProfile,
   validateStatusMapping,
 } from "./columnMapping.js";
+import { RowError, assertNewStayComplete, normalizeRow } from "./rowNormalizer.js";
 
 /**
  * Phase 7F-E — eZee CSV operational data import.
@@ -48,9 +48,22 @@ import {
  *  2. The Guest is saved first, then the Stay. If the Guest save succeeds and
  *     the Stay save then fails (DB-level error only), the Guest remains and
  *     the row is reported failed.
- *  3. Re-running is idempotent: the retry finds that Guest by
- *     (workspaceId, externalId) and reuses it — no duplicate Guest — then
- *     creates the Stay. A duplicate-key race on either save is retried (bounded, up to 5 attempts).
+ *  3. Re-running is idempotent: with an externalId the retry finds that Guest
+ *     by (workspaceId, externalId) and reuses it — no duplicate Guest — then
+ *     creates the Stay. Without one, the just-created keyless Guest is removed
+ *     when the Stay save fails, so the retry starts clean. A duplicate-key
+ *     race on either save is retried (bounded, up to 5 attempts).
+ *
+ * Guest identity (7F-F2, option A): guest.externalId is OPTIONAL.
+ *  - With an externalId, the Guest is (workspaceId, externalId), as before.
+ *  - Without one, identity comes from the reservation: an existing Stay's
+ *    linked Guest (Stay.guestId, scoped to the workspace) is updated; a NEW
+ *    reservation creates a NEW Guest with no externalId. Returning guests are
+ *    therefore NOT merged across reservations — that needs a real guest
+ *    identifier. A newly created keyless Guest is removed again if its Stay
+ *    save fails, so a retry cannot accumulate orphan Guests (it is the only
+ *    compensation in the importer: the Guest was created moments earlier in
+ *    the same call and nothing can reference it yet).
  *
  * Design choices (approved in 7F-E review):
  *  - A blank mapped cell never erases an existing non-empty value.
@@ -59,26 +72,9 @@ import {
  *    they happened, not rejected by an internal data-entry safeguard).
  */
 
-class RowError extends Error {}
-
 /** Caps persisted/returned per-row diagnostics so a huge bad file cannot bloat the ImportBatch document or response. */
 const MAX_RECORDED_ISSUES = 1000;
 const MAX_FILENAME_LENGTH = 255;
-
-const GUEST_FIELD_TARGETS = {
-  "guest.firstName": "firstName",
-  "guest.lastName": "lastName",
-  "guest.email": "email",
-  "guest.phone": "phone",
-};
-
-function parseNonNegativeInt(value, label) {
-  if (value === undefined || value === null || value === "") return undefined;
-  if (!/^\d{1,4}$/.test(value)) {
-    throw new RowError(`Invalid ${label} value`);
-  }
-  return Number(value);
-}
 
 /** Basename only, bounded — never persist a client-supplied path. */
 function sanitizeFilename(name) {
@@ -107,44 +103,21 @@ async function resolveUnitId(propertyId, roomNumber) {
  * Guest, (workspaceId, reservationId) for Stay.
  */
 async function processRow({ workspaceId, propertyId, mappingProfile, parseDate, statusMapping, rawRow }) {
-  const mapped = mapRow(rawRow, mappingProfile);
+  const row = normalizeRow(mapRow(rawRow, mappingProfile), { parseDate, statusMapping });
+  if (row.skipped) return { outcome: "skipped" };
 
-  const allBlank = Object.values(mapped).every((value) => value === undefined || value === "");
-  if (allBlank) {
-    return { outcome: "skipped" };
-  }
-
-  const reservationId = mapped["stay.reservationId"];
-  if (!reservationId) throw new RowError("Missing required stay.reservationId");
-  const externalId = mapped["guest.externalId"];
-  if (!externalId) throw new RowError("Missing required guest.externalId");
-
-  let checkIn;
-  if (mapped["stay.checkIn"]) {
-    checkIn = parseDate(mapped["stay.checkIn"]);
-    if (checkIn === null) throw new RowError("Invalid stay.checkIn date");
-  }
-
-  let checkOut;
-  if (mapped["stay.checkOut"]) {
-    checkOut = parseDate(mapped["stay.checkOut"]);
-    if (checkOut === null) throw new RowError("Invalid stay.checkOut date");
-  }
-
-  let status;
-  if (mapped["stay.status"]) {
-    status = resolveStatus(statusMapping, mapped["stay.status"]);
-    if (status === undefined) {
-      throw new RowError(`Unknown status value: "${clip(mapped["stay.status"])}"`);
-    }
-  }
-
-  const adults = parseNonNegativeInt(mapped["stay.adults"], "stay.adults");
-  const children = parseNonNegativeInt(mapped["stay.children"], "stay.children");
-  const unitId = await resolveUnitId(propertyId, mapped["stay.roomNumber"]);
+  const { reservationId, externalId, checkIn, checkOut, status, adults, children } = row;
+  const unitId = await resolveUnitId(propertyId, row.roomNumber);
 
   const existingStay = await Stay.findOne({ workspaceId, reservationId });
-  const existingGuest = await Guest.findOne({ workspaceId, externalId });
+  // Workspace-scoped in both branches: by natural key when the row has an
+  // externalId, otherwise through the existing Stay's own guest link.
+  let existingGuest = null;
+  if (externalId) {
+    existingGuest = await Guest.findOne({ workspaceId, externalId });
+  } else if (existingStay) {
+    existingGuest = await Guest.findOne({ _id: existingStay.guestId, workspaceId });
+  }
 
   if (existingStay) {
     // guestId/propertyId are immutable after creation (same as stayService's
@@ -153,25 +126,24 @@ async function processRow({ workspaceId, propertyId, mappingProfile, parseDate, 
     if (String(existingStay.propertyId) !== String(propertyId)) {
       throw new RowError("Reservation belongs to a different property");
     }
-    if (!existingGuest || String(existingStay.guestId) !== String(existingGuest._id)) {
-      throw new RowError("Reservation belongs to a different guest");
+    if (externalId) {
+      if (!existingGuest || String(existingStay.guestId) !== String(existingGuest._id)) {
+        throw new RowError("Reservation belongs to a different guest");
+      }
+    } else if (!existingGuest) {
+      throw new RowError("Reservation's guest record was not found");
     }
   } else {
-    // A NEW Stay must be fully specified: never silently default the status
-    // to the schema's "reserved", and never create a stay without a unit or
-    // a date range. (An existing Stay may leave these blank to retain them.)
-    if (!status) throw new RowError("Missing required stay.status for a new reservation");
-    if (unitId === undefined) throw new RowError("Missing required stay.roomNumber for a new reservation");
-    if (!checkIn) throw new RowError("Missing required stay.checkIn for a new reservation");
-    if (!checkOut) throw new RowError("Missing required stay.checkOut for a new reservation");
+    assertNewStayComplete(row);
+    if (!externalId && Object.keys(row.guest).length === 0) {
+      // A keyless guest with no details at all would be an empty shell.
+      throw new RowError("Missing guest details for a new reservation without guest.externalId");
+    }
   }
 
-  const guest = existingGuest ?? new Guest({ workspaceId, externalId });
-  // Non-empty values only: a blank cell never erases previously-known data.
-  for (const [target, field] of Object.entries(GUEST_FIELD_TARGETS)) {
-    const value = mapped[target];
-    if (value !== undefined && value !== "") guest[field] = value;
-  }
+  const createsKeylessGuest = !existingGuest && !externalId;
+  const guest = existingGuest ?? new Guest(externalId ? { workspaceId, externalId } : { workspaceId });
+  for (const [field, value] of Object.entries(row.guest)) guest[field] = value;
 
   const stay = existingStay ?? new Stay({ workspaceId, reservationId, guestId: guest._id, propertyId });
   if (unitId !== undefined) stay.unitId = unitId;
@@ -191,7 +163,18 @@ async function processRow({ workspaceId, propertyId, mappingProfile, parseDate, 
   await stay.validate();
 
   await guest.save();
-  await stay.save();
+  try {
+    await stay.save();
+  } catch (error) {
+    if (createsKeylessGuest) {
+      try {
+        await Guest.deleteOne({ _id: guest._id, workspaceId });
+      } catch {
+        // best effort; the original error is what matters
+      }
+    }
+    throw error;
+  }
 
   return { outcome: existingStay ? "updated" : "created", reservationId };
 }
@@ -240,7 +223,7 @@ export async function importOperationalCsv({
   await assertExists(Workspace, workspaceId, "Workspace");
 
   const propertyId = requireObjectId(rawPropertyId, "propertyId");
-  await findInWorkspaceOr404(Property, propertyId, workspaceId, "Property");
+  const property = await findInWorkspaceOr404(Property, propertyId, workspaceId, "Property");
 
   if (!buffer || buffer.length === 0) {
     throw new AppError("Uploaded file is empty", 400);
@@ -261,7 +244,8 @@ export async function importOperationalCsv({
   // (nothing written, no ImportBatch created).
   assertNoDuplicateHeaders(headerRow);
   const mappingProfile = validateMappingProfile(rawMappingProfile, headerRow);
-  const parseDate = buildDateParser(dateFormat);
+  // Dates are wall-clock times at the owning Property, in its IANA time zone.
+  const parseDate = buildDateParser(dateFormat, property.timezone || "UTC");
   const statusMapping = validateStatusMapping(rawStatusMapping);
 
   let rows;

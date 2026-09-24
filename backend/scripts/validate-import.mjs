@@ -188,6 +188,28 @@ async function main() {
   // before/after delta, not an assumed-empty global count.
   await connectDatabase();
   const knowledgeChunkCountBefore = await KnowledgeChunk.countDocuments({});
+  // Same idea for operational data: this database may hold REAL imported
+  // Guests/Stays/ImportBatches (e.g. the Kolam Gandhi evaluation import).
+  // Fingerprint every pre-existing document (id + updatedAt) before the suite
+  // creates anything, and compare it at the end — instead of assuming the
+  // database is empty.
+  const outsideFingerprint = async (excludeWorkspaceIds = []) => {
+    const scoped = excludeWorkspaceIds.length ? { workspaceId: { $nin: excludeWorkspaceIds } } : {};
+    const rows = [];
+    for (const [label, Model, filter] of [
+      ["ImportBatch", ImportBatch, scoped],
+      ["Guest", Guest, scoped],
+      ["Stay", Stay, scoped],
+      ["Property", Property, scoped],
+      ["Workspace", Workspace, excludeWorkspaceIds.length ? { _id: { $nin: excludeWorkspaceIds } } : {}],
+    ]) {
+      for (const doc of await Model.find(filter).select("_id updatedAt").lean()) {
+        rows.push(label + ":" + String(doc._id) + ":" + new Date(doc.updatedAt).getTime());
+      }
+    }
+    return rows.sort();
+  };
+  const outsideBefore = await outsideFingerprint();
   await disconnectDatabase();
 
   const wsA = trackCreated(
@@ -378,8 +400,8 @@ async function main() {
     { "Test Guest ID": `GX4-${stamp}`, "Test Reservation ID": `RX4-${stamp}`, "Test Status": "SomeUnmappedStatus" },
     // 12: unknown unit/room
     { "Test Guest ID": `GX5-${stamp}`, "Test Reservation ID": `RX5-${stamp}`, "Test Room Number": "999-does-not-exist", "Test Status": "Confirmed" },
-    // 17: missing guest external ID
-    { "Test Guest ID": "", "Test Reservation ID": `RX6-${stamp}`, "Test Status": "Confirmed" },
+    // 17: NEW reservation with no guest.externalId AND no guest details (an empty keyless guest is not created)
+    { "Test Guest ID": "", "Test Reservation ID": `RX6-${stamp}`, ...FULL, "Test Status": "Confirmed" },
     // one valid row so the batch also produces a success
     { "Test Guest ID": `GX7-${stamp}`, "Test Reservation ID": `RX7-${stamp}`, ...FULL, "Test Status": "Confirmed" },
   ]);
@@ -402,8 +424,8 @@ async function main() {
   else fail("7FE.11: unknown status produced a row error", errorMessages);
   if (/Unit not found/i.test(errorMessages)) ok("7FE.12: unknown unit produced a row error");
   else fail("7FE.12: unknown unit produced a row error", errorMessages);
-  if (/externalId/i.test(errorMessages)) ok("7FE.17: missing guest externalId produced a row error");
-  else fail("7FE.17: missing guest externalId produced a row error", errorMessages);
+  if (/Missing guest details for a new reservation without guest\.externalId/.test(errorMessages)) ok("7FE.17: a new reservation with no externalId and no guest details produced a row error");
+  else fail("7FE.17: a new reservation with no externalId and no guest details produced a row error", errorMessages);
 
   // track the one successful row's Guest/Stay for cleanup
   await connectDatabase();
@@ -594,8 +616,8 @@ async function main() {
   await badProfile({ "guest.email": { $ne: null } }, "non-string source column value");
   await badProfile({ "guest.email": "x".repeat(300) }, "over-long source column name");
   const noRequired = { ...MAPPING_PROFILE };
-  delete noRequired["guest.externalId"];
-  await expectImportStatus("7FE.R.map: profile missing required guest.externalId rejected", { fields: { ...baseFields, mappingProfile: noRequired }, fileBytes: csv1 }, 400);
+  delete noRequired["stay.reservationId"];
+  await expectImportStatus("7FE.R.map: profile missing required stay.reservationId rejected", { fields: { ...baseFields, mappingProfile: noRequired }, fileBytes: csv1 }, 400);
   await expectImportStatus("7FE.R.map: mappingProfile that is not valid JSON rejected", { fields: { ...baseFields, mappingProfile: "{not json" }, fileBytes: csv1 }, 400);
   await expectImportStatus("7FE.R.map: mappingProfile as JSON array rejected", { fields: { ...baseFields, mappingProfile: "[]" }, fileBytes: csv1 }, 400);
   await expectImportStatus("7FE.R.map: statusMapping with a non-enum target rejected", { fields: { ...baseFields, statusMapping: { Confirmed: "vip" } }, fileBytes: csv1 }, 400);
@@ -1015,6 +1037,338 @@ async function main() {
   else fail("7FE.P: retry is idempotent", "guests=" + pwGuestCount + " stays=" + pwStayCount);
 
   // =========================================================
+  // 7F-F2: real-format support (12-hour AM/PM dates at a property time zone,
+  // combined Pax, full guest name), verified through the persistence path.
+  // Fixtures are synthetic values in the evaluation file's column layout —
+  // NOT the real evaluation data and NOT an official eZee mapping.
+  // =========================================================
+  const propK = trackCreated(
+    await expectStatus("7FE.F2: Asia/Kolkata property create", "POST", "/properties", { workspaceId: wsA, name: "F2 Kolkata Property", code: "KF2" + stamp, timezone: "Asia/Kolkata" }, 201),
+    "propertyIds",
+  );
+  trackCreated(await expectStatus("7FE.F2: unit 1A-R1 create", "POST", "/units", { workspaceId: wsA, propertyId: propK, unitNumber: "1A-R1", type: "room" }, 201), "unitIds");
+  trackCreated(await expectStatus("7FE.F2: unit 1A-R2 create", "POST", "/units", { workspaceId: wsA, propertyId: propK, unitNumber: "1A-R2", type: "room" }, 201), "unitIds");
+  // Guest No. (a contact number) is deliberately NOT in this profile: not an identity key, not a phone.
+  const lookupByReservation = async (resId) => {
+    await connectDatabase();
+    const stay = await Stay.findOne({ workspaceId: wsA, reservationId: resId });
+    const guest = stay ? await Guest.findOne({ _id: stay.guestId, workspaceId: wsA }) : null;
+    await disconnectDatabase();
+    return { stay, guest };
+  };
+  const F2_HEADERS = ["Res. No.", "Guest No.", "Guest", "Room No.", "Arrival", "Departure", "Pax", "Res. Type"];
+  const F2_PROFILE = {
+    "guest.fullName": "Guest",
+    "stay.reservationId": "Res. No.",
+    "stay.roomNumber": "Room No.",
+    "stay.checkIn": "Arrival",
+    "stay.checkOut": "Departure",
+    "stay.adultsChildren": "Pax",
+    "stay.status": "Res. Type",
+  };
+  const f2Fields = { workspaceId: wsA, propertyId: propK, mappingProfile: F2_PROFILE, dateFormat: "DD/MM/YYYY hh:mm A", statusMapping: { "Confirm Booking": "confirmed" } };
+  const f2Csv = (rows) => buildCsv(rows, { headers: F2_HEADERS });
+  const countUnits = async () => {
+    await connectDatabase();
+    const n = await Unit.countDocuments({ propertyId: propK });
+    await disconnectDatabase();
+    return n;
+  };
+
+  const unitsBefore = await countUnits();
+  const f2Ok = await expectImportStatus(
+    "7FE.F2: real-format rows (DD/MM/YYYY hh:mm A, Pax, full name, Confirm Booking) import",
+    {
+      fields: f2Fields,
+      fileBytes: f2Csv([
+        { "Res. No.": "F2R1-" + stamp, "Guest No.": "F2G1-" + stamp, Guest: "Mr. Test Alpha", "Room No.": "1A-R1", Arrival: "24/09/2026 12:00 PM", Departure: "27/09/2026 11:00 AM", Pax: "2/0", "Res. Type": "Confirm Booking" },
+        { "Res. No.": "F2R2-" + stamp, "Guest No.": "F2G2-" + stamp, Guest: "Mrs. Test Beta Gamma", "Room No.": "1A-R2", Arrival: "01/10/2026 12:00 PM", Departure: "05/10/2026 11:00 AM", Pax: "3/1", "Res. Type": " confirm booking " },
+      ]),
+    },
+    201,
+  );
+  trackImportBatch(f2Ok);
+  if (f2Ok.json?.data?.rowsCreated === 2 && f2Ok.json?.data?.rowsFailed === 0) ok("7FE.F2: both real-format rows were created");
+  else fail("7FE.F2: both real-format rows were created", JSON.stringify(f2Ok.json?.data));
+  const f2a = await lookupByReservation("F2R1-" + stamp);
+  const f2b = await lookupByReservation("F2R2-" + stamp);
+  if (f2a.stay?.checkIn?.toISOString() === "2026-09-24T06:30:00.000Z" && f2a.stay?.checkOut?.toISOString() === "2026-09-27T05:30:00.000Z") {
+    ok("7FE.F2: 12:00 PM / 11:00 AM at an Asia/Kolkata property are stored as 06:30Z / 05:30Z (wall-clock time preserved, not reinterpreted as UTC)");
+  } else {
+    fail("7FE.F2: property time zone applied to stored dates", JSON.stringify(f2a.stay));
+  }
+  if (f2b.stay?.checkOut?.toISOString() === "2026-10-05T05:30:00.000Z" && f2b.stay?.checkIn?.toISOString() === "2026-10-01T06:30:00.000Z") ok("7FE.F2: 01/10/2026 is read day-first (1 October)");
+  else fail("7FE.F2: 01/10/2026 is read day-first", JSON.stringify(f2b.stay));
+  if (f2a.guest?.firstName === "Test" && f2a.guest?.lastName === "Alpha" && f2b.guest?.firstName === "Test" && f2b.guest?.lastName === "Beta Gamma") {
+    ok("7FE.F2: honorific stripped and name split into firstName/lastName");
+  } else {
+    fail("7FE.F2: honorific stripped and name split", JSON.stringify({ a: f2a.guest, b: f2b.guest }));
+  }
+  if (f2a.guest && f2a.guest.externalId === undefined && f2a.guest.phone === undefined && !JSON.stringify(f2a.guest).includes("F2G1-" + stamp)) {
+    ok("7FE.F2: Guest No. is ignored - it is stored nowhere (not externalId, not phone, not metadata)");
+  } else {
+    fail("7FE.F2: Guest No. is ignored", JSON.stringify(f2a.guest));
+  }
+  if (f2a.stay && f2a.guest && String(f2a.stay.guestId) === String(f2a.guest._id)) ok("7FE.F2: guest identity comes through the reservation - Stay.guestId links the keyless Guest");
+  else fail("7FE.F2: Stay.guestId links the keyless Guest", JSON.stringify({ stay: f2a.stay, guest: f2a.guest }));
+  if (f2a.stay?.adults === 2 && f2a.stay?.children === 0 && f2b.stay?.adults === 3 && f2b.stay?.children === 1) ok("7FE.F2: Pax 2/0 and 3/1 stored as adults/children");
+  else fail("7FE.F2: Pax stored as adults/children", JSON.stringify({ a: f2a.stay, b: f2b.stay }));
+  if (f2a.stay?.status === "confirmed" && f2b.stay?.status === "confirmed") ok("7FE.F2: explicit statusMapping maps Confirm Booking (case/whitespace-insensitive) to confirmed");
+  else fail("7FE.F2: explicit statusMapping applied", JSON.stringify({ a: f2a.stay?.status, b: f2b.stay?.status }));
+  await connectDatabase();
+  const unitA = await Unit.findOne({ propertyId: propK, unitNumber: "1A-R1" });
+  await disconnectDatabase();
+  if (unitA && String(f2a.stay?.unitId) === String(unitA._id) && String(f2a.stay?.propertyId) === String(propK)) ok("7FE.F2: Room No. resolves to the existing Unit of the import's Property");
+  else fail("7FE.F2: Room No. resolves to the existing Unit", JSON.stringify(f2a.stay));
+
+  // Row-level failures for the new formats (partial-import architecture)
+  const f2Bad = await expectImportStatus(
+    "7FE.F2: invalid Pax / dates / unknown Unit rows",
+    {
+      fields: f2Fields,
+      fileBytes: f2Csv([
+        { "Res. No.": "F2B1-" + stamp, "Guest No.": "F2GB1-" + stamp, Guest: "Mr. Bad One", "Room No.": "1A-R1", Arrival: "24/09/2026 12:00 PM", Departure: "27/09/2026 11:00 AM", Pax: "2-0", "Res. Type": "Confirm Booking" },
+        { "Res. No.": "F2B2-" + stamp, "Guest No.": "F2GB2-" + stamp, Guest: "Mr. Bad Two", "Room No.": "1A-R1", Arrival: "24/09/2026 13:00 PM", Departure: "27/09/2026 11:00 AM", Pax: "2/0", "Res. Type": "Confirm Booking" },
+        { "Res. No.": "F2B3-" + stamp, "Guest No.": "F2GB3-" + stamp, Guest: "Mr. Bad Three", "Room No.": "9Z-R9", Arrival: "24/09/2026 12:00 PM", Departure: "27/09/2026 11:00 AM", Pax: "2/0", "Res. Type": "Confirm Booking" },
+        { "Res. No.": "F2B4-" + stamp, "Guest No.": "F2GB4-" + stamp, Guest: "Mr. Bad Four", "Room No.": "1A-R1", Arrival: "27/09/2026 12:00 PM", Departure: "27/09/2026 11:00 AM", Pax: "2/0", "Res. Type": "Confirm Booking" },
+        { "Res. No.": "F2B5-" + stamp, "Guest No.": "F2GB5-" + stamp, Guest: "Mr. Bad Five", "Room No.": "1A-R1", Arrival: "24/09/2026 12:00 PM", Departure: "27/09/2026 11:00 AM", Pax: "2/0", "Res. Type": "Tentative" },
+      ]),
+    },
+    201,
+  );
+  trackImportBatch(f2Bad);
+  const f2BadMsgs = (f2Bad.json?.data?.errors || []).map((e) => e.message);
+  if (f2Bad.json?.data?.rowsFailed === 5 && f2Bad.json?.data?.rowsCreated === 0) ok("7FE.F2: all 5 invalid new-format rows fail individually");
+  else fail("7FE.F2: all 5 invalid new-format rows fail", JSON.stringify(f2Bad.json?.data));
+  const has = (re) => f2BadMsgs.some((m) => re.test(m));
+  if (has(/Invalid stay\.adultsChildren/) && has(/Invalid stay\.checkIn/) && has(/Unit not found/) && has(/checkOut must be after checkIn/) && has(/Unknown status/)) {
+    ok("7FE.F2: errors identify malformed Pax, invalid 12-hour time, unknown Unit, inverted range, unknown status");
+  } else {
+    fail("7FE.F2: expected error messages present", JSON.stringify(f2BadMsgs));
+  }
+  const badStays = await lookupByReservation("F2B3-" + stamp);
+  await connectDatabase();
+  const badGuestCount = await Guest.countDocuments({ workspaceId: wsA, firstName: "Bad" });
+  await disconnectDatabase();
+  if (!badStays.stay && badGuestCount === 0) ok("7FE.F2: failed rows wrote neither Guest nor Stay (no orphan keyless Guests either)");
+  else fail("7FE.F2: failed rows wrote neither Guest nor Stay", JSON.stringify({ stay: !!badStays.stay, badGuestCount }));
+  const unitsAfter = await countUnits();
+  if (unitsBefore === 2 && unitsAfter === 2) ok("7FE.F2: the importer never creates Units (still exactly the 2 pre-created, even with an unknown room)");
+  else fail("7FE.F2: importer never creates Units", "before=" + unitsBefore + " after=" + unitsAfter);
+
+  // blank full name / pax never erase; re-import updates in place
+  const f2Blank = await expectImportStatus(
+    "7FE.F2: re-import with blank name and blank Pax",
+    { fields: f2Fields, fileBytes: f2Csv([{ "Res. No.": "F2R1-" + stamp, "Guest No.": "F2G1-" + stamp, Guest: "", "Room No.": "", Arrival: "", Departure: "", Pax: "", "Res. Type": "Confirm Booking" }]) },
+    201,
+  );
+  trackImportBatch(f2Blank);
+  const f2c = await lookupByReservation("F2R1-" + stamp);
+  if (f2Blank.json?.data?.rowsUpdated === 1 && f2c.guest?.firstName === "Test" && f2c.guest?.lastName === "Alpha" && f2c.stay?.adults === 2 && f2c.stay?.children === 0 && String(f2c.stay?.checkIn) === String(f2a.stay?.checkIn)) {
+    ok("7FE.F2: blank full name / Pax / dates / room retain existing values on re-import");
+  } else {
+    fail("7FE.F2: blank cells retain existing values", JSON.stringify({ data: f2Blank.json?.data, guest: f2c.guest, stay: f2c.stay }));
+  }
+
+  // profile-level rules (file-level 400s) and tenant/property isolation with the new formats
+  const withProfile = (extra) => ({ ...f2Fields, mappingProfile: { ...F2_PROFILE, ...extra } });
+  await expectImportStatus("7FE.F2: guest.fullName together with guest.firstName rejected", { fields: withProfile({ "guest.firstName": "Guest" }), fileBytes: f2Csv([]) }, 400);
+  await expectImportStatus("7FE.F2: stay.adultsChildren together with stay.adults rejected", { fields: withProfile({ "stay.adults": "Pax" }), fileBytes: f2Csv([]) }, 400);
+  await expectImportStatus("7FE.F2: stay.source (Business Source) is not an accepted target this phase", { fields: withProfile({ "stay.source": "Res. Type" }), fileBytes: f2Csv([]) }, 400);
+  await expectImportStatus("7FE.F2: dateFormat using hh without A rejected", { fields: { ...f2Fields, dateFormat: "DD/MM/YYYY hh:mm" }, fileBytes: f2Csv([]) }, 400);
+  await expectImportStatus("7FE.F2: propertyId from another workspace still rejected with the new formats", { fields: { ...f2Fields, propertyId: propB }, fileBytes: f2Csv([]) }, 404);
+  await expectImportStatus("7FE.F2: unknown workspace still rejected with the new formats", { fields: { ...f2Fields, workspaceId: "64b64c4f2f1c2e0012345678" }, fileBytes: f2Csv([]) }, 404);
+  const propBadTz = trackCreated(
+    await expectStatus("7FE.F2: property with an invalid IANA time zone create", "POST", "/properties", { workspaceId: wsA, name: "F2 Bad TZ", code: "KF2X" + stamp, timezone: "Not/AZone" }, 201),
+    "propertyIds",
+  );
+  await expectImportStatus("7FE.F2: import into a property with an invalid time zone is rejected at file level (never guessed as UTC)", { fields: { ...f2Fields, propertyId: propBadTz }, fileBytes: f2Csv([]) }, 400);
+
+  // existing UTC behavior is unchanged for properties left at the default zone (see 7FE.S / 7FE.R tests above, all on a "UTC" property)
+  const utcProp = await request("GET", "/properties/" + propA + "?workspaceId=" + wsA);
+  if (utcProp.json?.data?.timezone === "UTC") ok("7FE.F2: the pre-existing tests ran against a default-UTC property, so their date expectations still prove unchanged UTC behavior");
+  else fail("7FE.F2: baseline property is default UTC", JSON.stringify(utcProp.json?.data));
+
+  // =========================================================
+  // 7F-F2 option A: guest.externalId is OPTIONAL. Guest identity comes from
+  // the reservation (Stay.guestId); Stay identity is still (workspace, reservationId).
+  // =========================================================
+  const ID_HEADERS = ["Res. No.", "First", "Last", "Room No.", "Arrival", "Departure", "Res. Type"];
+  const ID_PROFILE = {
+    "stay.reservationId": "Res. No.",
+    "guest.firstName": "First",
+    "guest.lastName": "Last",
+    "stay.roomNumber": "Room No.",
+    "stay.checkIn": "Arrival",
+    "stay.checkOut": "Departure",
+    "stay.status": "Res. Type",
+  };
+  const idFields = { workspaceId: wsA, propertyId: propK, mappingProfile: ID_PROFILE, dateFormat: "DD/MM/YYYY hh:mm A", statusMapping: { "Confirm Booking": "confirmed" } };
+  const idRow = (resId, extra = {}) => ({ "Res. No.": resId, First: "Ida", Last: "Keyless", "Room No.": "1A-R1", Arrival: "10/11/2026 12:00 PM", Departure: "12/11/2026 11:00 AM", "Res. Type": "Confirm Booking", ...extra });
+  const idCsv = (rows) => buildCsv(rows, { headers: ID_HEADERS });
+  const guestsInWs = async (filter = {}) => {
+    await connectDatabase();
+    const n = await Guest.countDocuments({ workspaceId: wsA, ...filter });
+    await disconnectDatabase();
+    return n;
+  };
+  const idRes1 = "IDR1-" + stamp;
+
+  const idFirst = await expectImportStatus("7FE.ID: new reservation with NO guest.externalId mapped imports", { fields: idFields, fileBytes: idCsv([idRow(idRes1)]) }, 201);
+  trackImportBatch(idFirst);
+  const idG0 = await guestsInWs({ firstName: "Ida" });
+  const idS1 = await lookupByReservation(idRes1);
+  if (idFirst.json?.data?.rowsCreated === 1 && idFirst.json?.data?.rowsFailed === 0 && idG0 === 1 && idS1.stay && idS1.guest && idS1.guest.externalId === undefined) {
+    ok("7FE.ID: creates one Stay and one Guest that has no externalId, linked via Stay.guestId");
+  } else {
+    fail("7FE.ID: creates one keyless Guest + Stay", JSON.stringify({ data: idFirst.json?.data, guests: idG0, guest: idS1.guest }));
+  }
+  const idGuestId = String(idS1.guest?._id);
+
+  const idAgain = await expectImportStatus("7FE.ID: re-import of the same reservation", { fields: idFields, fileBytes: idCsv([idRow(idRes1)]) }, 201);
+  trackImportBatch(idAgain);
+  const idS2 = await lookupByReservation(idRes1);
+  if (idAgain.json?.data?.rowsUpdated === 1 && idAgain.json?.data?.rowsCreated === 0 && (await guestsInWs({ firstName: "Ida" })) === 1 && String(idS2.guest?._id) === idGuestId) {
+    ok("7FE.ID: re-import updates in place - no duplicate Guest, same Guest id, same Stay");
+  } else {
+    fail("7FE.ID: re-import is idempotent without an externalId", JSON.stringify(idAgain.json?.data));
+  }
+
+  const idRename = await expectImportStatus("7FE.ID: re-import with a changed name and blank name fields elsewhere", { fields: idFields, fileBytes: idCsv([idRow(idRes1, { First: "Ida", Last: "Renamed" })]) }, 201);
+  trackImportBatch(idRename);
+  const idS3 = await lookupByReservation(idRes1);
+  if (idS3.guest?.lastName === "Renamed" && String(idS3.guest?._id) === idGuestId && (await guestsInWs({ firstName: "Ida" })) === 1) ok("7FE.ID: changed guest fields update the reservation's linked Guest (still one Guest)");
+  else fail("7FE.ID: changed guest fields update the linked Guest", JSON.stringify(idS3.guest));
+  const idBlank = await expectImportStatus("7FE.ID: re-import with blank guest cells", { fields: idFields, fileBytes: idCsv([idRow(idRes1, { First: "", Last: "" })]) }, 201);
+  trackImportBatch(idBlank);
+  const idS4 = await lookupByReservation(idRes1);
+  if (idBlank.json?.data?.rowsUpdated === 1 && idS4.guest?.firstName === "Ida" && idS4.guest?.lastName === "Renamed") ok("7FE.ID: blank guest cells never erase existing guest values (also without an externalId)");
+  else fail("7FE.ID: blank cells retain guest values", JSON.stringify({ data: idBlank.json?.data, guest: idS4.guest }));
+
+  // A second reservation for the same-looking person is a separate Guest (documented: no cross-reservation merge without a real identifier)
+  const idRes2 = "IDR2-" + stamp;
+  trackImportBatch(await expectImportStatus("7FE.ID: second reservation, same name", { fields: idFields, fileBytes: idCsv([idRow(idRes2, { "Room No.": "1A-R2" })]) }, 201));
+  if ((await guestsInWs({ firstName: "Ida" })) === 2) ok("7FE.ID: identical names on two reservations stay two Guests (no fuzzy/name-based merging)");
+  else fail("7FE.ID: identical names are not merged", String(await guestsInWs({ firstName: "Ida" })));
+
+  // New reservation with nothing to describe the guest -> row error, nothing written
+  const idNoDetail = await expectImportStatus("7FE.ID: new reservation with no guest details at all", { fields: idFields, fileBytes: idCsv([idRow("IDR3-" + stamp, { First: "", Last: "" })]) }, 201);
+  trackImportBatch(idNoDetail);
+  const idS5 = await lookupByReservation("IDR3-" + stamp);
+  if (idNoDetail.json?.data?.rowsFailed === 1 && /Missing guest details/.test(idNoDetail.json?.data?.errors?.[0]?.message || "") && !idS5.stay) ok("7FE.ID: an empty keyless Guest is never created (row fails, no Stay)");
+  else fail("7FE.ID: empty keyless Guest rejected", JSON.stringify(idNoDetail.json?.data));
+
+  // Optional, not forbidden: a profile that DOES map an externalId still uses it; a blank cell falls back to the reservation
+  const ID_PROFILE_KEYED = { ...ID_PROFILE, "guest.externalId": "Ref" };
+  const keyedFields = { ...idFields, mappingProfile: ID_PROFILE_KEYED };
+  const keyedRow = (resId, ref, extra = {}) => ({ ...idRow(resId, extra), Ref: ref });
+  const keyedCsv = (rows) => buildCsv(rows, { headers: [...ID_HEADERS, "Ref"] });
+  const idKeyed = await expectImportStatus("7FE.ID: profile that maps an externalId still uses it", { fields: keyedFields, fileBytes: keyedCsv([keyedRow("IDK1-" + stamp, "KEY-" + stamp, { First: "Kay", Last: "Keyed" })]) }, 201);
+  trackImportBatch(idKeyed);
+  const idK1 = await lookupByReservation("IDK1-" + stamp);
+  if (idKeyed.json?.data?.rowsCreated === 1 && idK1.guest?.externalId === "KEY-" + stamp) ok("7FE.ID: a supplied externalId is still stored and is still the Guest's natural key");
+  else fail("7FE.ID: supplied externalId still stored", JSON.stringify(idK1.guest));
+  const idKeyedBlank = await expectImportStatus("7FE.ID: keyed profile, blank externalId cell on the existing reservation", { fields: keyedFields, fileBytes: keyedCsv([keyedRow("IDK1-" + stamp, "", { First: "Kay", Last: "Keyed2" })]) }, 201);
+  trackImportBatch(idKeyedBlank);
+  const idK2 = await lookupByReservation("IDK1-" + stamp);
+  if (idKeyedBlank.json?.data?.rowsUpdated === 1 && String(idK2.guest?._id) === String(idK1.guest?._id) && idK2.guest?.externalId === "KEY-" + stamp && idK2.guest?.lastName === "Keyed2") ok("7FE.ID: blank externalId falls back to the reservation's linked Guest (which keeps its externalId)");
+  else fail("7FE.ID: blank externalId falls back to the linked Guest", JSON.stringify({ data: idKeyedBlank.json?.data, guest: idK2.guest }));
+  const idKeyedMismatch = await expectImportStatus("7FE.ID: existing reservation re-imported with a DIFFERENT externalId", { fields: keyedFields, fileBytes: keyedCsv([keyedRow("IDK1-" + stamp, "OTHER-" + stamp)]) }, 201);
+  trackImportBatch(idKeyedMismatch);
+  if (idKeyedMismatch.json?.data?.rowsFailed === 1 && /different guest/.test(idKeyedMismatch.json?.data?.errors?.[0]?.message || "")) ok("7FE.ID: Stay.guestId stays immutable - a conflicting externalId fails the row");
+  else fail("7FE.ID: conflicting externalId fails the row", JSON.stringify(idKeyedMismatch.json?.data));
+  if ((await guestsInWs({ externalId: "OTHER-" + stamp })) === 0) ok("7FE.ID: the conflicting row created no Guest");
+  else fail("7FE.ID: the conflicting row created no Guest");
+
+  // Property immutability still applies on the keyless path
+  trackCreated(await expectStatus("7FE.ID: unit 1A-R1 on the other property (so the room resolves and the property check is what fires)", "POST", "/units", { workspaceId: wsA, propertyId: propA, unitNumber: "1A-R1", type: "room" }, 201), "unitIds");
+  const idOtherProp = await expectImportStatus("7FE.ID: existing reservation imported under a different property", { fields: { ...idFields, propertyId: propA }, fileBytes: idCsv([idRow(idRes1)]) }, 201);
+  trackImportBatch(idOtherProp);
+  if (idOtherProp.json?.data?.rowsFailed === 1 && /different property/.test(idOtherProp.json?.data?.errors?.[0]?.message || "")) ok("7FE.ID: reservation identity still pins the Stay to its property");
+  else fail("7FE.ID: property immutability on the keyless path", JSON.stringify(idOtherProp.json?.data));
+
+  // Tenant isolation: the same reservationId in another workspace is a separate Stay + Guest; nothing crosses over
+  const propBK = trackCreated(
+    await expectStatus("7FE.ID: workspace B property (Kolkata)", "POST", "/properties", { workspaceId: wsB, name: "B ID Prop", code: "KIDB" + stamp, timezone: "Asia/Kolkata" }, 201),
+    "propertyIds",
+  );
+  trackCreated(await expectStatus("7FE.ID: workspace B unit 1A-R1", "POST", "/units", { workspaceId: wsB, propertyId: propBK, unitNumber: "1A-R1", type: "room" }, 201), "unitIds");
+  const idB = await expectImportStatus(
+    "7FE.ID: same reservationId imported into workspace B",
+    { fields: { ...idFields, workspaceId: wsB, propertyId: propBK }, fileBytes: idCsv([idRow(idRes1, { First: "Bee", Last: "Other" })]) },
+    201,
+  );
+  trackImportBatch(idB);
+  await connectDatabase();
+  const bStay = await Stay.findOne({ workspaceId: wsB, reservationId: idRes1 });
+  const bGuest = bStay ? await Guest.findOne({ _id: bStay.guestId, workspaceId: wsB }) : null;
+  await disconnectDatabase();
+  const idS6 = await lookupByReservation(idRes1);
+  if (idB.json?.data?.rowsCreated === 1 && bStay && bGuest?.firstName === "Bee" && String(bStay._id) !== String(idS6.stay?._id) && idS6.guest?.firstName === "Ida" && idS6.guest?.lastName === "Renamed") {
+    ok("7FE.ID: keyless identity is tenant-scoped - workspace B created its own Stay/Guest and workspace A's records are untouched");
+  } else {
+    fail("7FE.ID: tenant isolation on the keyless path", JSON.stringify({ data: idB.json?.data, a: idS6.guest }));
+  }
+
+  // Concurrent identical imports of a NEW keyless reservation: exactly one Stay, one Guest, no orphans, no 5xx
+  let idRaceBad = null;
+  for (let round = 1; round <= 5 && !idRaceBad; round += 1) {
+    const raceRes = "IDRACE" + round + "-" + stamp;
+    const raceCsv2 = idCsv([idRow(raceRes, { First: "Race" + round, Last: "Keyless", "Room No.": "1A-R2" })]);
+    const results = await Promise.all([1, 2, 3, 4].map(() => uploadImport({ fields: idFields, fileBytes: raceCsv2 })));
+    results.forEach((r) => trackImportBatch(r));
+    const failedRows = results.reduce((n, r) => n + (r.json?.data?.rowsFailed || 0), 0);
+    const guestCount = await guestsInWs({ firstName: "Race" + round });
+    const found = await lookupByReservation(raceRes);
+    await connectDatabase();
+    const stayCount = await Stay.countDocuments({ workspaceId: wsA, reservationId: raceRes });
+    await disconnectDatabase();
+    if (!results.every((r) => r.status === 201) || failedRows !== 0 || guestCount !== 1 || stayCount !== 1 || !found.guest) {
+      idRaceBad = { round, statuses: results.map((r) => r.status), failedRows, guestCount, stayCount, errors: results.map((r) => r.json?.data?.errors) };
+    }
+  }
+  if (!idRaceBad) ok("7FE.ID: 5 rounds of 4 concurrent identical keyless imports - exactly one Guest and one Stay each, no orphan Guests");
+  else fail("7FE.ID: concurrent keyless imports leave no orphans/duplicates", JSON.stringify(idRaceBad));
+
+  // Stay save fails after the keyless Guest was saved -> the just-created Guest is removed; retry starts clean
+  await connectDatabase();
+  const realStaySave2 = Stay.prototype.save;
+  let stayFailsLeft = 1;
+  const idPw = "IDPW-" + stamp;
+  Stay.prototype.save = function patchedKeylessSave(...args) {
+    if (stayFailsLeft > 0 && this.reservationId === idPw) {
+      stayFailsLeft -= 1;
+      return Promise.reject(new Error("simulated stay save failure"));
+    }
+    return realStaySave2.apply(this, args);
+  };
+  const idPwInput = {
+    workspaceId: wsA,
+    propertyId: propK,
+    filename: "keyless-partial-write.csv",
+    buffer: Buffer.from(idCsv([idRow(idPw, { First: "Pw", Last: "Keyless" })])),
+    mappingProfile: ID_PROFILE,
+    dateFormat: "DD/MM/YYYY hh:mm A",
+    statusMapping: { "Confirm Booking": "confirmed" },
+  };
+  let pwFirst;
+  try {
+    pwFirst = await importOperationalCsv(idPwInput);
+  } finally {
+    Stay.prototype.save = realStaySave2;
+  }
+  const pwGuestsMid = await Guest.countDocuments({ workspaceId: wsA, firstName: "Pw" });
+  const pwStayMid = await Stay.countDocuments({ workspaceId: wsA, reservationId: idPw });
+  const pwSecond = await importOperationalCsv(idPwInput);
+  const pwGuestsEnd = await Guest.countDocuments({ workspaceId: wsA, firstName: "Pw" });
+  const pwStayEnd = await Stay.countDocuments({ workspaceId: wsA, reservationId: idPw });
+  await disconnectDatabase();
+  if (pwFirst?.rowsFailed === 1 && pwGuestsMid === 0 && pwStayMid === 0) ok("7FE.ID: when the Stay save fails, the just-created keyless Guest is removed (no orphan)");
+  else fail("7FE.ID: keyless Guest removed when Stay save fails", JSON.stringify({ pwFirst, pwGuestsMid, pwStayMid }));
+  if (pwSecond?.rowsCreated === 1 && pwGuestsEnd === 1 && pwStayEnd === 1) ok("7FE.ID: retry after that failure is clean - exactly one Guest and one Stay");
+  else fail("7FE.ID: clean retry", JSON.stringify({ pwSecond, pwGuestsEnd, pwStayEnd }));
+
+  // =========================================================
   // 29: operational rows never create KnowledgeDocuments/KnowledgeChunks
   // =========================================================
   await connectDatabase();
@@ -1033,17 +1387,20 @@ async function main() {
   // 30: real development workspace remains isolated from test data
   // =========================================================
   await connectDatabase();
-  const probeWorkspace = await Workspace.findOne({ slug: { $ne: undefined } }).sort({ createdAt: 1 }).limit(1);
-  const importBatchesOutsideTestWorkspaces = await ImportBatch.countDocuments({
-    workspaceId: { $nin: [wsA, wsB].map((id) => id) },
-  });
+  const outsideAfter = await outsideFingerprint(created.workspaceIds);
   await disconnectDatabase();
-  if (importBatchesOutsideTestWorkspaces === 0) {
-    ok("7FE.30: no ImportBatch was created outside this suite's own stamped test workspaces");
+  const addedOutside = outsideAfter.filter((row) => !outsideBefore.includes(row));
+  const removedOrChangedOutside = outsideBefore.filter((row) => !outsideAfter.includes(row));
+  if (addedOutside.length === 0) {
+    ok("7FE.30: no ImportBatch/Guest/Stay/Property/Workspace was created or modified outside this suite's own stamped test workspaces (baseline comparison, tolerant of real data)");
   } else {
-    fail("7FE.30: no ImportBatch was created outside this suite's own stamped test workspaces", `count=${importBatchesOutsideTestWorkspaces}`);
+    fail("7FE.30: nothing created or modified outside the test workspaces", JSON.stringify(addedOutside.slice(0, 5)));
   }
-  if (probeWorkspace) ok("7FE.30b: pre-existing workspace(s) in the database were left untouched by this suite (read-only probe)");
+  if (removedOrChangedOutside.length === 0) {
+    ok("7FE.30b: every pre-existing document (incl. any real imported data) is present and unmodified - none deleted");
+  } else {
+    fail("7FE.30b: pre-existing documents deleted or modified", JSON.stringify(removedOrChangedOutside.slice(0, 5)));
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exitCode = 1;

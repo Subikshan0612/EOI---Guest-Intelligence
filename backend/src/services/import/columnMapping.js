@@ -15,6 +15,7 @@ import { AppError } from "../../utils/AppError.js";
 
 const GUEST_TARGET_FIELDS = [
   "guest.externalId",
+  "guest.fullName",
   "guest.firstName",
   "guest.lastName",
   "guest.email",
@@ -29,6 +30,7 @@ const STAY_TARGET_FIELDS = [
   "stay.status",
   "stay.adults",
   "stay.children",
+  "stay.adultsChildren",
 ];
 
 const MAX_SOURCE_COLUMN_LENGTH = 200;
@@ -44,8 +46,12 @@ export function clip(value, max = 40) {
 
 const ALLOWED_TARGET_FIELDS = new Set([...GUEST_TARGET_FIELDS, ...STAY_TARGET_FIELDS]);
 
-/** Without these two, nothing in the import can be matched idempotently. */
-const REQUIRED_TARGET_FIELDS = ["guest.externalId", "stay.reservationId"];
+/**
+ * The reservation is the import's identity: a Stay is matched by
+ * (workspaceId, reservationId). guest.externalId is optional — when absent,
+ * a Guest's identity comes from the Stay it belongs to (see importService.js).
+ */
+const REQUIRED_TARGET_FIELDS = ["stay.reservationId"];
 
 /** The single header-matching rule: trim + case-insensitive. Used for both duplicate detection and mapping. */
 export function normalizeHeaderKey(value) {
@@ -120,6 +126,15 @@ export function validateMappingProfile(mappingProfile, headerRow) {
     }
   }
 
+  // A combined cell and its split equivalents are mutually exclusive — both
+  // would describe the same field, and which one wins would be a guess.
+  if (normalized["guest.fullName"] && (normalized["guest.firstName"] || normalized["guest.lastName"])) {
+    throw new AppError('mappingProfile cannot map "guest.fullName" together with "guest.firstName"/"guest.lastName"', 400);
+  }
+  if (normalized["stay.adultsChildren"] && (normalized["stay.adults"] || normalized["stay.children"])) {
+    throw new AppError('mappingProfile cannot map "stay.adultsChildren" together with "stay.adults"/"stay.children"', 400);
+  }
+
   return normalized;
 }
 
@@ -135,14 +150,17 @@ export function mapRow(rawRow, mappingProfile) {
   return mapped;
 }
 
-const DATE_TOKEN_PATTERN = /YYYY|MM|DD|HH|mm|ss/g;
+// HH = 24-hour clock; hh = 12-hour clock and must be paired with A (AM/PM).
+const DATE_TOKEN_PATTERN = /YYYY|MM|DD|HH|hh|mm|ss|A/g;
 const DATE_TOKEN_REGEX_PARTS = {
   YYYY: "(\\d{4})",
   MM: "(\\d{2})",
   DD: "(\\d{2})",
   HH: "(\\d{2})",
+  hh: "(\\d{2})",
   mm: "(\\d{2})",
   ss: "(\\d{2})",
+  A: "([AaPp][Mm])",
 };
 
 function escapeRegExp(value) {
@@ -150,13 +168,41 @@ function escapeRegExp(value) {
 }
 
 /**
- * Builds a deterministic date parser from a caller-supplied token format
- * (e.g. "DD/MM/YYYY" or "MM-DD-YYYY HH:mm"). No eZee date format is assumed
- * — this must be told the format, never guess it. Returns a function that
- * returns a UTC Date on success, or null on a value that doesn't match the
- * format or has an out-of-range/impossible date component.
+ * Offset (ms) of an IANA time zone from UTC at a given instant, via the
+ * built-in Intl API (no dependency). Positive east of UTC (Asia/Kolkata = +5:30).
  */
-export function buildDateParser(dateFormat) {
+function zoneOffsetMs(formatter, utcMs) {
+  const parts = {};
+  for (const part of formatter.formatToParts(new Date(utcMs))) parts[part.type] = part.value;
+  const asIfUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  return asIfUtc - Math.floor(utcMs / 1000) * 1000;
+}
+
+/**
+ * Converts a wall-clock time (expressed as if it were UTC) in the given zone
+ * to the real instant. Two passes so a zone with DST resolves its offset at
+ * the converted instant, not the naive one.
+ */
+function wallClockToInstant(formatter, wallMs) {
+  const firstGuess = wallMs - zoneOffsetMs(formatter, wallMs);
+  return wallMs - zoneOffsetMs(formatter, firstGuess);
+}
+
+/**
+ * Builds a deterministic date parser from a caller-supplied token format
+ * (e.g. "DD/MM/YYYY", "MM-DD-YYYY HH:mm", or 12-hour "DD/MM/YYYY hh:mm A").
+ * No eZee date format is assumed — this must be told the format, never
+ * guess it. Returns a function that returns a Date on success, or null on a
+ * value that doesn't match the format or has an out-of-range/impossible
+ * date component.
+ *
+ * The parsed value is a WALL-CLOCK time in `timeZone` (the owning
+ * Property's IANA zone), converted to the true instant — "12:00 PM" at an
+ * Asia/Kolkata property is stored as 06:30 UTC, not 12:00 UTC. With the
+ * default "UTC" the wall-clock time is the instant, which is exactly the
+ * importer's behavior before time zones were applied.
+ */
+export function buildDateParser(dateFormat, timeZone = "UTC") {
   if (typeof dateFormat !== "string" || dateFormat.trim() === "") {
     throw new AppError("dateFormat is required", 400);
   }
@@ -183,6 +229,29 @@ export function buildDateParser(dateFormat) {
   if (new Set(order).size !== order.length) {
     throw new AppError("dateFormat contains duplicate tokens", 400);
   }
+  if (order.includes("hh") !== order.includes("A")) {
+    throw new AppError('dateFormat must use "hh" (12-hour) together with "A" (AM/PM)', 400);
+  }
+  if (order.includes("hh") && order.includes("HH")) {
+    throw new AppError('dateFormat cannot mix "HH" (24-hour) and "hh" (12-hour)', 400);
+  }
+
+  let formatter;
+  try {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+    });
+  } catch {
+    throw new AppError("Property timezone is not a valid IANA time zone", 400);
+  }
+  const isUtc = timeZone === "UTC";
 
   const regex = new RegExp(`^${regexSource}$`);
 
@@ -193,25 +262,32 @@ export function buildDateParser(dateFormat) {
 
     const parts = {};
     order.forEach((token, index) => {
-      parts[token] = Number(parsedMatch[index + 1]);
+      parts[token] = token === "A" ? parsedMatch[index + 1].toUpperCase() : Number(parsedMatch[index + 1]);
     });
 
     const year = parts.YYYY;
     const month = parts.MM;
     const day = parts.DD;
-    const hour = parts.HH ?? 0;
     const minute = parts.mm ?? 0;
     const second = parts.ss ?? 0;
+
+    let hour;
+    if (parts.hh !== undefined) {
+      if (parts.hh < 1 || parts.hh > 12) return null;
+      hour = (parts.hh % 12) + (parts.A === "PM" ? 12 : 0); // 12 AM -> 0, 12 PM -> 12
+    } else {
+      hour = parts.HH ?? 0;
+    }
 
     if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) {
       return null;
     }
 
-    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    const wallClock = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    if (wallClock.getUTCFullYear() !== year || wallClock.getUTCMonth() !== month - 1 || wallClock.getUTCDate() !== day) {
       return null; // rejects rollover dates such as 30 Feb
     }
-    return date;
+    return isUtc ? wallClock : new Date(wallClockToInstant(formatter, wallClock.getTime()));
   };
 }
 
