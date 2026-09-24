@@ -97,6 +97,10 @@ function assertListExcludes(name, result, forbiddenId) {
 
 async function cleanup() {
   await connectDatabase();
+  // Workspace-scoped backstop (this suite's own stamped test workspaces ONLY —
+  // never a global or unscoped delete), in addition to the tracked-id deletes.
+  await KnowledgeChunk.deleteMany({ workspaceId: { $in: created.workspaceIds } });
+  await KnowledgeDocument.deleteMany({ workspaceId: { $in: created.workspaceIds } });
   await KnowledgeChunk.deleteMany({ documentId: { $in: created.knowledgeDocumentIds } });
   await KnowledgeDocument.deleteMany({ _id: { $in: created.knowledgeDocumentIds } });
   await Unit.deleteMany({ _id: { $in: created.unitIds } });
@@ -105,8 +109,33 @@ async function cleanup() {
   await disconnectDatabase();
 }
 
+/**
+ * Fingerprint of every KnowledgeDocument/KnowledgeChunk row (id + updatedAt),
+ * optionally excluding rows that belong to this suite's own test workspaces.
+ * The dev database may hold REAL ingested knowledge, so this suite must never
+ * assume those collections are empty — it proves instead that it created,
+ * modified, and deleted nothing outside its own fixture workspaces.
+ */
+async function knowledgeFingerprint(excludeWorkspaceIds = []) {
+  const scoped = excludeWorkspaceIds.length ? { workspaceId: { $nin: excludeWorkspaceIds } } : {};
+  const rows = [];
+  for (const [label, Model] of [
+    ["KnowledgeDocument", KnowledgeDocument],
+    ["KnowledgeChunk", KnowledgeChunk],
+  ]) {
+    for (const doc of await Model.find(scoped).select("_id updatedAt").lean()) {
+      rows.push(label + ":" + String(doc._id) + ":" + new Date(doc.updatedAt).getTime());
+    }
+  }
+  return rows.sort();
+}
+
 async function main() {
   const stamp = Date.now();
+
+  await connectDatabase();
+  const knowledgeBefore = await knowledgeFingerprint();
+  await disconnectDatabase();
 
   // === Fixture: workspace A (+ property, second property, unit) and workspace B ===
   const wsA = trackCreated(
@@ -526,7 +555,8 @@ async function main() {
   const chunkCount = await KnowledgeChunk.countDocuments({
     documentId: { $in: [wsWideId, propScopedId, unitScopedId, versionedId, supersedeId] },
   });
-  const totalChunksInCollection = await KnowledgeChunk.countDocuments({});
+  const testWorkspaceChunkCount = await KnowledgeChunk.countDocuments({ workspaceId: { $in: created.workspaceIds } });
+  const knowledgeAfter = await knowledgeFingerprint(created.workspaceIds);
   await disconnectDatabase();
 
   if (chunkCount === 0) {
@@ -534,13 +564,30 @@ async function main() {
   } else {
     fail("6C CHUNK BOUNDARY: authoring documents created zero KnowledgeChunk rows for them", `found ${chunkCount}`);
   }
-  if (totalChunksInCollection === 0) {
-    ok("6C CHUNK BOUNDARY: KnowledgeChunk collection remains entirely empty (chunking is Phase 6D)");
+  // Same guarantee as the old "collection is entirely empty" check — authoring
+  // never chunks (Phase 6D) — but scoped to what this suite can actually
+  // produce and stronger in one respect: it covers EVERY chunk in either test
+  // workspace, not only chunks of the five tracked documents.
+  if (testWorkspaceChunkCount === 0) {
+    ok("6C CHUNK BOUNDARY: no KnowledgeChunk exists in either test workspace (chunking is Phase 6D)");
   } else {
-    fail(
-      "6C CHUNK BOUNDARY: KnowledgeChunk collection remains entirely empty (chunking is Phase 6D)",
-      `found ${totalChunksInCollection} total`,
-    );
+    fail("6C CHUNK BOUNDARY: no KnowledgeChunk exists in either test workspace (chunking is Phase 6D)", `found ${testWorkspaceChunkCount}`);
+  }
+  // Replaces the assumption that the whole database has zero chunks/documents:
+  // anything that already existed before the suite (e.g. real ingested
+  // knowledge) must be present and unmodified afterwards, and nothing new may
+  // have appeared outside the test workspaces.
+  const addedOutside = knowledgeAfter.filter((row) => !knowledgeBefore.includes(row));
+  const goneOrChangedOutside = knowledgeBefore.filter((row) => !knowledgeAfter.includes(row));
+  if (addedOutside.length === 0) {
+    ok("6C CHUNK BOUNDARY: authoring created no KnowledgeChunk/KnowledgeDocument anywhere outside the test workspaces (baseline comparison, tolerant of real data)");
+  } else {
+    fail("6C CHUNK BOUNDARY: authoring created rows outside the test workspaces", JSON.stringify(addedOutside.slice(0, 5)));
+  }
+  if (goneOrChangedOutside.length === 0) {
+    ok("6C ISOLATION: every pre-existing KnowledgeDocument/KnowledgeChunk is present and unmodified (none deleted or changed by this suite)");
+  } else {
+    fail("6C ISOLATION: pre-existing knowledge rows deleted or modified", JSON.stringify(goneOrChangedOutside.slice(0, 5)));
   }
 
   await cleanup();
