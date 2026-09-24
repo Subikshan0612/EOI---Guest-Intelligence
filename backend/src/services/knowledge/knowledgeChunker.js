@@ -47,15 +47,29 @@ const MAX_HEADING_LENGTH = 80;
 
 const MARKDOWN_HEADING = /^(#{1,6})\s+(.+)$/;
 
-// Matches "1. Housekeeping", "1.1 Room preparation", "2 Check-in" — a
-// numbering prefix followed by text. Deliberately does NOT match a line
-// ending in . / ! / ? — that is exactly what separates a heading like
-// "1. Housekeeping" from a numbered step like "1. Check the AC power.",
-// without any NLP: a heading is a short, unpunctuated label; a step is a
-// complete, punctuated instruction.
-const NUMBERED_HEADING = /^(\d+(?:\.\d+)*)\.?\s+(.+)$/;
+// Matches "1. Housekeeping", "1.1 Room preparation", "12.3.4 Deep Heading" -
+// DOTTED numbering ("1." or a nested "1.1" / "1.1.") followed by a heading
+// that starts with an UPPERCASE letter.
+//
+// Both requirements exist because extracted text also contains ordinary
+// lines that merely begin with a number: table cells such as "7 guests" or a
+// phone-style "12345 67890 / ...", and prose such as "24 hour operation" or
+// "1.5 hours before check-in". The earlier rule accepted any number followed
+// by text, so those lines became "headings" and, since a heading line is
+// stored only in `section`, their leading number was silently discarded.
+// Bare-integer numbering ("2 Check-in") is therefore deliberately NOT
+// recognized: by text alone it is indistinguishable from "7 guests", and
+// leaving it as body text loses nothing.
+//
+// It also deliberately does NOT match a line ending in . / ! / ? - that is
+// exactly what separates a heading like "1. Housekeeping" from a numbered
+// step like "1. Check the AC power.", without any NLP: a heading is a
+// short, unpunctuated label; a step is a complete, punctuated instruction.
+// (Known limit: an unpunctuated, capitalized "3. Provide access information"
+// is still read as a heading - only extractor-level structure could tell.)
+const NUMBERED_HEADING = /^((?:\d+\.)+\d*|\d+\.)\s+(\p{Lu}.*)$/u;
 
-/** Returns the heading text for a line, or null if it isn't a heading. */
+/** Returns the heading text for a line (numbering included), or null if it isn't a heading. */
 function detectHeading(line) {
   const trimmed = line.trim();
   if (!trimmed) return null;
@@ -67,7 +81,9 @@ function detectHeading(line) {
   if (numbered) {
     const text = numbered[2].trim();
     if (text.length > 0 && text.length <= MAX_HEADING_LENGTH && !/[.!?]$/.test(text)) {
-      return text;
+      // The FULL line, numbering included ("1. Housekeeping"), matching how
+      // Markdown headings already keep their own numbering in `section`.
+      return trimmed;
     }
   }
 

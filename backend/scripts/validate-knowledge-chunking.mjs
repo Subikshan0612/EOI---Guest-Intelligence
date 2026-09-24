@@ -239,7 +239,9 @@ async function main() {
   );
   const numberedChunks = numberedRes.json?.data?.chunks || [];
   const numberedSections = numberedChunks.map((c) => c.section);
-  if (JSON.stringify(numberedSections) === JSON.stringify(["Housekeeping", "Check-in"])) {
+  // The numbered prefix is preserved in `section` (it used to be dropped, which
+  // lost information; Markdown headings already kept their numbering).
+  if (JSON.stringify(numberedSections) === JSON.stringify(["1. Housekeeping", "2. Check-in"])) {
     ok("6D SECTION: numbered headings ('1. Housekeeping') detected, not treated as steps");
   } else {
     fail("6D SECTION: numbered headings ('1. Housekeeping') detected, not treated as steps", JSON.stringify(numberedSections));
