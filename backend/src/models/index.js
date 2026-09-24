@@ -23,3 +23,4 @@ export {
   KNOWLEDGE_STATUSES,
 } from "./KnowledgeDocument.js";
 export { KnowledgeChunk } from "./KnowledgeChunk.js";
+export { ImportBatch, IMPORT_SOURCE_TYPES, IMPORT_BATCH_STATUSES } from "./ImportBatch.js";

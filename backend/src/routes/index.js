@@ -13,6 +13,7 @@ import { actionRoutes } from "./actionRoutes.js";
 import { outcomeRoutes } from "./outcomeRoutes.js";
 import { knowledgeDocumentRoutes } from "./knowledgeDocumentRoutes.js";
 import { learningRoutes } from "./learningRoutes.js";
+import { importRoutes } from "./importRoutes.js";
 
 const apiRouter = Router();
 
@@ -30,5 +31,6 @@ apiRouter.use("/actions", actionRoutes);
 apiRouter.use("/outcomes", outcomeRoutes);
 apiRouter.use("/knowledge-documents", knowledgeDocumentRoutes);
 apiRouter.use("/learning", learningRoutes);
+apiRouter.use("/imports", importRoutes);
 
 export { apiRouter };
