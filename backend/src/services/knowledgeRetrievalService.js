@@ -149,6 +149,7 @@ export function verifyAndBuildResults(pythonResults, eligibleChunksById) {
       version: chunk.version,
       scope: expectedScope,
       section: chunk.section,
+      sectionPath: Array.isArray(chunk.sectionPath) ? [...chunk.sectionPath] : [],
       chunkIndex: chunk.chunkIndex,
       text: chunk.text,
       similarityScore: result.similarityScore,

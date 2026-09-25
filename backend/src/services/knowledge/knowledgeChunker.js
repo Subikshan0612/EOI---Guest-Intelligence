@@ -34,6 +34,8 @@
  * style, and each chunk's own leading/trailing whitespace is trimmed.
  */
 
+import { computeSectionPaths } from "./sectionPath.js";
+
 // Conservative initial threshold (Phase 6A report, Section 7): large enough
 // to hold a full moderate SOP section — a short procedure with several
 // numbered steps — as one chunk, small enough to keep a single chunk
@@ -69,13 +71,18 @@ const MARKDOWN_HEADING = /^(#{1,6})\s+(.+)$/;
 // is still read as a heading - only extractor-level structure could tell.)
 const NUMBERED_HEADING = /^((?:\d+\.)+\d*|\d+\.)\s+(\p{Lu}.*)$/u;
 
-/** Returns the heading text for a line (numbering included), or null if it isn't a heading. */
+/**
+ * Returns `{ text, level }` for a heading line (numbering included in `text`),
+ * or null if it isn't a heading. `level` is the Markdown level (1-6), or null
+ * for a heading recognised by numbering alone - section-path calculation
+ * treats only the former as explicit outline structure.
+ */
 function detectHeading(line) {
   const trimmed = line.trim();
   if (!trimmed) return null;
 
   const markdown = trimmed.match(MARKDOWN_HEADING);
-  if (markdown) return markdown[2].trim();
+  if (markdown) return { text: markdown[2].trim(), level: markdown[1].length };
 
   const numbered = trimmed.match(NUMBERED_HEADING);
   if (numbered) {
@@ -83,7 +90,7 @@ function detectHeading(line) {
     if (text.length > 0 && text.length <= MAX_HEADING_LENGTH && !/[.!?]$/.test(text)) {
       // The FULL line, numbering included ("1. Housekeeping"), matching how
       // Markdown headings already keep their own numbering in `section`.
-      return trimmed;
+      return { text: trimmed, level: null };
     }
   }
 
@@ -98,7 +105,7 @@ function detectHeading(line) {
 function splitIntoSections(content) {
   const lines = content.replace(/\r\n/g, "\n").split("\n");
   const sections = [];
-  let current = { heading: "", bodyLines: [] };
+  let current = { heading: "", level: null, bodyLines: [] };
   let sawHeading = false;
 
   for (const line of lines) {
@@ -107,7 +114,7 @@ function splitIntoSections(content) {
       if (current.bodyLines.length > 0 || sawHeading) {
         sections.push(current);
       }
-      current = { heading, bodyLines: [] };
+      current = { heading: heading.text, level: heading.level, bodyLines: [] };
       sawHeading = true;
     } else {
       current.bodyLines.push(line);
@@ -115,9 +122,20 @@ function splitIntoSections(content) {
   }
   sections.push(current);
 
-  return sections
-    .map((section) => ({ heading: section.heading, body: section.bodyLines.join("\n") }))
+  const kept = sections
+    .map((section) => ({ heading: section.heading, level: section.level, body: section.bodyLines.join("\n") }))
     .filter((section) => section.body.trim().length > 0 || section.heading);
+
+  // Paths are computed over every heading, including body-less parents such as
+  // "13. CANCELLATION & REFUND", so a child chunk still carries its parent.
+  const headed = kept.filter((section) => section.heading);
+  const paths = computeSectionPaths(headed.map((section) => ({ text: section.heading, level: section.level })));
+  let next = 0;
+  return kept.map((section) => ({
+    heading: section.heading,
+    body: section.body,
+    path: section.heading ? paths[next++] : [],
+  }));
 }
 
 /** Greedily joins consecutive units (each already <= maxChars) into chunks up to maxChars. */
@@ -184,7 +202,7 @@ function splitOversizedUnits(units, maxChars) {
 
 /**
  * Deterministically transforms a KnowledgeDocument's canonical `content`
- * into an ordered array of `{ section, text }` chunks. The caller (the
+ * into an ordered array of `{ section, sectionPath, text }` chunks. The caller (the
  * chunk service) is responsible for assigning `chunkIndex` from array
  * position and attaching the document's own denormalized scope fields —
  * this module knows nothing about MongoDB, workspaces, or documents.
@@ -200,7 +218,7 @@ export function chunkContent(content) {
     for (const piece of chunkText(body, MAX_CHUNK_CHARS)) {
       const text = piece.trim();
       if (text.length === 0) continue; // never emit an empty chunk
-      chunks.push({ section: section.heading, text });
+      chunks.push({ section: section.heading, sectionPath: [...section.path], text });
     }
   }
 

@@ -64,7 +64,7 @@ def _format_knowledge_section(knowledge: list[KnowledgeItem]) -> str:
 
     blocks = []
     for item in knowledge:
-        section_label = item.section or "(no section heading)"
+        section_label = " › ".join(item.sectionPath) or item.section or "(no section heading)"
         header = (
             f'[chunkId: {item.chunkId} | scope: {item.scope} | document: {item.knowledgeDocumentId} '
             f'v{item.version} | section: "{section_label}"]'

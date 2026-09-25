@@ -14,6 +14,7 @@
  * in Python, no Gemini SDK in Node).
  */
 import { readFileSync } from "node:fs";
+import { buildEmbeddingText, EMBEDDING_INPUT_VERSION } from "../src/services/knowledge/embeddingText.js";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
 import { Workspace, Property, KnowledgeDocument, KnowledgeChunk } from "../src/models/index.js";
 
@@ -179,6 +180,39 @@ async function main() {
   const allNumeric = chunksAfter.every((c) => c.embedding.every((v) => typeof v === "number" && Number.isFinite(v)));
   if (allNumeric) ok("6E NODE->PYTHON: every embedding value is finite numeric data");
   else fail("6E NODE->PYTHON: every embedding value is finite numeric data");
+
+  // Contextual embedding input: the stored vector is the embedding of
+  // buildEmbeddingText(chunk) (sectionPath + text), NOT of chunk.text alone.
+  // The test provider hashes its input, so this is exactly checkable by asking
+  // Python directly for both candidate inputs.
+  {
+    const embedDirect = async (text) => {
+      const res = await fetch(`${PYTHON_BASE}/v1/embeddings`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ texts: [text] }),
+      });
+      return (await res.json()).embeddings?.[0];
+    };
+    const pathsOk = chunksAfter.every((c) => Array.isArray(c.sectionPath) && c.sectionPath.length === 1 && c.sectionPath[0] === c.section);
+    if (pathsOk) ok("7G EMBEDDING CONTEXT: chunks persisted sectionPath (leaf === section)");
+    else fail("7G EMBEDDING CONTEXT: chunks persisted sectionPath (leaf === section)", JSON.stringify(chunksAfter.map((c) => ({ s: c.section, p: c.sectionPath }))));
+
+    const first = chunksAfter[0];
+    const contextual = await embedDirect(buildEmbeddingText(first));
+    const bare = await embedDirect(first.text);
+    if (JSON.stringify(first.embedding) === JSON.stringify(contextual)) ok("7G EMBEDDING CONTEXT: stored vector == embedding of sectionPath + text");
+    else fail("7G EMBEDDING CONTEXT: stored vector == embedding of sectionPath + text");
+    if (JSON.stringify(first.embedding) !== JSON.stringify(bare)) ok("7G EMBEDDING CONTEXT: stored vector is NOT the embedding of bare chunk.text");
+    else fail("7G EMBEDDING CONTEXT: stored vector is NOT the embedding of bare chunk.text");
+
+    if (chunksAfter.every((c) => c.embeddingInputVersion === EMBEDDING_INPUT_VERSION && c.embeddingInputVersion === 1)) ok("7G EMBEDDING CONTEXT: embeddingInputVersion = 1 on every embedded chunk");
+    else fail("7G EMBEDDING CONTEXT: embeddingInputVersion = 1 on every embedded chunk", JSON.stringify(chunksAfter.map((c) => c.embeddingInputVersion)));
+    if (chunksBefore.every((c) => c.embeddingInputVersion === undefined)) ok("7G EMBEDDING CONTEXT: never-embedded chunks carry no embeddingInputVersion");
+    else fail("7G EMBEDDING CONTEXT: never-embedded chunks carry no embeddingInputVersion");
+    if (chunksAfter.every((c) => !("embeddingText" in c))) ok("7G EMBEDDING CONTEXT: embedding text is not persisted");
+    else fail("7G EMBEDDING CONTEXT: embedding text is not persisted");
+    if (chunksAfter.every((c) => !c.text.includes(c.section))) ok("7G EMBEDDING CONTEXT: chunk.text itself contains no injected heading");
+    else fail("7G EMBEDDING CONTEXT: chunk.text itself contains no injected heading");
+  }
 
   const dims = new Set(chunksAfter.map((c) => c.embedding.length));
   if (dims.size === 1) ok("6E NODE->PYTHON: all vectors share identical dimensionality");

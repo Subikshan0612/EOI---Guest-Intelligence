@@ -1,6 +1,7 @@
 import { KnowledgeChunk } from "../models/KnowledgeChunk.js";
 import { KnowledgeDocument } from "../models/KnowledgeDocument.js";
 import { requestEmbeddingsFromAiService } from "./ai/aiServiceClient.js";
+import { buildEmbeddingText, EMBEDDING_INPUT_VERSION } from "./knowledge/embeddingText.js";
 import { validateEmbeddingBatch } from "./knowledge/embeddingValidation.js";
 import { computeContentHash } from "./knowledgeDocumentService.js";
 import { AppError } from "../utils/AppError.js";
@@ -128,7 +129,8 @@ export async function embedKnowledgeDocument(documentId, workspaceId) {
   const results = [];
   try {
     for (const batch of batches) {
-      const texts = batch.map((chunk) => chunk.text);
+      // The one canonical embedding input (see knowledge/embeddingText.js).
+      const texts = batch.map((chunk) => buildEmbeddingText(chunk));
       const { embeddings, model } = await requestEmbeddingsFromAiService(texts);
       dimension = validateEmbeddingBatch(embeddings, model, texts.length, dimension);
 
@@ -144,7 +146,7 @@ export async function embedKnowledgeDocument(documentId, workspaceId) {
           // already uniquely identifies the chunk — belt-and-suspenders
           // against ever touching a chunk from another document or version.
           filter: { _id: chunk._id, documentId: document._id, version: document.version },
-          update: { $set: { embedding, embeddingModel: model } },
+          update: { $set: { embedding, embeddingModel: model, embeddingInputVersion: EMBEDDING_INPUT_VERSION } },
         },
       })),
       { ordered: true },

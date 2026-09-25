@@ -42,6 +42,9 @@ class KnowledgeItem(BaseModel):
     version: int = Field(ge=1)
     scope: KnowledgeScope
     section: str = ""
+    # Ordered headings from outermost ancestor to `section`; empty when the
+    # chunk has no known hierarchy. Display context only - never part of `text`.
+    sectionPath: list[str] = Field(default_factory=list)
     chunkIndex: int = Field(ge=0)
     text: str = Field(min_length=1)
     similarityScore: float

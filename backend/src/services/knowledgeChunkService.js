@@ -76,6 +76,7 @@ export async function rebuildChunksForDocument(documentId, workspaceId) {
     effectiveTo: document.effectiveTo,
     chunkIndex,
     section: piece.section,
+    sectionPath: piece.sectionPath.length > 0 ? piece.sectionPath : undefined,
     text: piece.text,
   }));
 

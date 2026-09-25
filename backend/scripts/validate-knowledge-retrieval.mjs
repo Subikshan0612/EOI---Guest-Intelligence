@@ -213,6 +213,10 @@ async function main() {
   if (topKResults.length === 5) ok("6G.6: results are capped at top-K = 5");
   else fail("6G.6: results are capped at top-K = 5", `got ${topKResults.length}`);
 
+  // === 6b: sectionPath is exposed on every result (empty when the chunk has none); scoring unaffected ===
+  if (topKResults.every((r) => Array.isArray(r.sectionPath))) ok("7G.6b: every retrieval result exposes sectionPath as an array");
+  else fail("7G.6b: every retrieval result exposes sectionPath as an array", JSON.stringify(topKResults.map((r) => r.sectionPath)));
+
   // === 7: candidate cap = 200 (bulk-inserted directly for speed) ===
   await connectDatabase();
   const capWs = trackCreated(await expectStatus("6G.7: cap-test workspace create", "POST", "/workspaces", { name: `Phase6G Cap WS ${stamp}`, slug: `phase6g-cap-ws-${stamp}` }, 201), "workspaceIds");

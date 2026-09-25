@@ -108,6 +108,40 @@ def test_prompt_includes_knowledge_provenance_inline():
     assert "Example only. Synthetic SOP text for testing." in knowledge_section
 
 
+def test_prompt_shows_section_path_breadcrumb_but_keeps_chunk_text_unchanged():
+    text = "Example only. Synthetic cancellation text."
+    _, user_prompt = _build([
+        knowledge_item(
+            "c1", "unit", text=text, section="13.1 First Rule",
+            sectionPath=["13. Alpha Policy", "13.1 First Rule"],
+        )
+    ])
+    knowledge_section = user_prompt[user_prompt.index("=== RETRIEVED ORGANIZATIONAL KNOWLEDGE ==="):]
+    assert 'section: "13. Alpha Policy › 13.1 First Rule"' in knowledge_section
+    # The breadcrumb is display context only - the chunk text is passed through untouched.
+    assert f"\n{text}" in knowledge_section
+    assert "›" not in text
+
+
+def test_prompt_falls_back_to_section_when_section_path_is_empty_or_absent():
+    _, with_empty = _build([knowledge_item("c1", "unit", section="AC Troubleshooting", sectionPath=[])])
+    _, absent = _build([knowledge_item("c1", "unit", section="AC Troubleshooting")])
+    for prompt in (with_empty, absent):
+        assert 'section: "AC Troubleshooting"' in prompt
+        assert "›" not in prompt
+
+
+def test_knowledge_item_accepts_section_path_and_defaults_it_to_empty():
+    assert KnowledgeItem(**knowledge_item("c1", "unit")).sectionPath == []
+    item = KnowledgeItem(**knowledge_item("c1", "unit", sectionPath=["A", "B"]))
+    assert item.sectionPath == ["A", "B"]
+
+
+def test_knowledge_item_still_forbids_unknown_fields():
+    with pytest.raises(Exception):
+        KnowledgeItem(**knowledge_item("c1", "unit", unexpectedField="x"))
+
+
 def test_prompt_with_relevant_unit_knowledge():
     _, user_prompt = _build([knowledge_item("c1", "unit")])
     assert "scope: unit" in user_prompt

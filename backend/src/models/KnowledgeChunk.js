@@ -79,6 +79,14 @@ const knowledgeChunkSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    // Ordered headings from outermost ancestor down to `section` itself,
+    // derived only from explicit structure (see services/knowledge/
+    // sectionPath.js). Absent on chunks created before it existed and on
+    // chunks with no heading. When present, its last element equals `section`.
+    sectionPath: {
+      type: [String],
+      default: undefined,
+    },
     text: {
       type: String,
       required: true,
@@ -93,6 +101,12 @@ const knowledgeChunkSchema = new mongoose.Schema(
     },
     embeddingModel: {
       type: String,
+      default: undefined,
+    },
+    // Which recipe (services/knowledge/embeddingText.js) built the text this
+    // vector was made from. 1 = sectionPath + text. Absent until embedded.
+    embeddingInputVersion: {
+      type: Number,
       default: undefined,
     },
   },
