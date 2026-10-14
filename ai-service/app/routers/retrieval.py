@@ -11,7 +11,11 @@ does not call Gemini for intelligence generation — it only embeds one
 query string (via the same embedding provider Phase 6E already uses),
 scores it against the supplied candidate vectors (via the Phase 6F cosine
 similarity primitive), and applies a fixed, documented scope-preference
-boost before returning a deterministically ordered list. Node is
+boost before returning a deterministically ordered list.
+
+PHASE 25: a candidate is scored only if its embedding model equals the model that embedded the query AND its
+dimension equals the query vector's; anything else is skipped and counted (never compared, never returned). This
+service applies NO relevance threshold and no top-K: Node owns both (server-side, authoritative). Node is
 responsible for re-verifying every returned chunkId, for the final top-K
 selection, and for any persistence, prompting, or UI decision — none of
 which happen here (Phase 6H's job, not this endpoint's).
@@ -27,8 +31,8 @@ narrow one. See tests/test_retrieval.py for both directions verified.
 
 from fastapi import APIRouter
 
-from app.exceptions import MalformedResponseError
 from app.models.retrieval import KnowledgeRetrievalRequest, KnowledgeRetrievalResponse, RetrievalResult
+from app.models.visibility import is_visible
 from app.services.embedding_service import generate_embeddings
 from app.services.vector_math import cosine_similarity
 
@@ -48,13 +52,23 @@ def post_knowledge_retrieval(payload: KnowledgeRetrievalRequest) -> KnowledgeRet
     embedding_response = generate_embeddings([payload.queryText])
     query_embedding = embedding_response.embeddings[0]
 
-    if len(query_embedding) != len(payload.candidates[0].embedding):
-        raise MalformedResponseError(
-            "Query embedding dimensionality does not match candidate embeddings."
-        )
+    # Defence in depth: Node has already removed everything above the caller's
+    # level; anything that still is above it is ignored, never scored.
+    visible_candidates = [c for c in payload.candidates if is_visible(c.visibility, payload.authorizedLevel)]
+    if not visible_candidates:
+        return KnowledgeRetrievalResponse(results=[], model=embedding_response.model)
+
+    # Phase 25 - embedding compatibility. Cosine similarity is only meaningful between vectors of the SAME
+    # embedding model and the SAME dimension. A candidate that fails either test is never compared (and can
+    # therefore never reach a prompt); it is counted so Node can tell "nothing relevant" from "nothing comparable".
+    query_model = embedding_response.model
+    compatible = [
+        c for c in visible_candidates if c.embeddingModel == query_model and len(c.embedding) == len(query_embedding)
+    ]
+    incompatible_count = len(visible_candidates) - len(compatible)
 
     results = []
-    for candidate in payload.candidates:
+    for candidate in compatible:
         similarity_score = cosine_similarity(query_embedding, candidate.embedding)
         retrieval_score = similarity_score * SCOPE_BOOST[candidate.scope]
         results.append(
@@ -73,4 +87,9 @@ def post_knowledge_retrieval(payload: KnowledgeRetrievalRequest) -> KnowledgeRet
         key=lambda r: (-r.retrievalScore, -r.similarityScore, -SCOPE_SPECIFICITY[r.scope], r.chunkId)
     )
 
-    return KnowledgeRetrievalResponse(results=results, model=embedding_response.model)
+    return KnowledgeRetrievalResponse(
+        results=results,
+        model=query_model,
+        evaluatedCandidates=len(visible_candidates),
+        incompatibleCandidates=incompatible_count,
+    )

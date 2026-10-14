@@ -8,6 +8,7 @@
  * this only exercises the thin CRUD service and its tenant-isolation
  * guarantees, per the Phase 6A architecture report.
  */
+import "./lib/authFetch.mjs";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
 import { Workspace, Property, Unit, KnowledgeDocument } from "../src/models/index.js";
 
@@ -277,7 +278,7 @@ async function main() {
       "POST",
       "/knowledge-documents",
       { workspaceId: wsA, propertyId: propB, title: "X", documentType: "sop", content: "x" },
-      400,
+      404,
     ),
     "knowledgeDocumentIds",
   );
@@ -287,7 +288,7 @@ async function main() {
       "POST",
       "/knowledge-documents",
       { workspaceId: wsA, unitId: unitA, propertyId: propB, title: "X", documentType: "sop", content: "x" },
-      400,
+      404,
     ),
     "knowledgeDocumentIds",
   );
@@ -458,7 +459,7 @@ async function main() {
         content: "x",
         supersedesId: docId,
       },
-      400,
+      404,
     ),
     "knowledgeDocumentIds",
   );

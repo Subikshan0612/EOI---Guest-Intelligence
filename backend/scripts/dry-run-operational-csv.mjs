@@ -17,6 +17,8 @@
  * --check-units performs READ-ONLY lookups (find) to report whether each
  * room number matches an existing Unit of the Kolam Gandhi property.
  */
+import { requireLoopbackDatabase } from "../src/config/mongoSafety.js";
+requireLoopbackDatabase("dry-run-operational-csv"); // never silently operate on a remote database (see src/config/mongoSafety.js)
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

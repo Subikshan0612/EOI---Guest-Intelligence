@@ -2,15 +2,15 @@ import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { useLayout } from "../../hooks/useLayout";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
-import ContextPanel from "./ContextPanel";
+import DevProfileNotice from "../auth/DevProfileNotice";
+import SessionNotice from "../auth/SessionNotice";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 
 export default function AppShell() {
-  const { pathname, sidebarOpen, contextOpen, closeOverlays } = useLayout();
-  const isTabletOrBelow = useMediaQuery("(max-width: 1100px)");
+  const { pathname, sidebarOpen, closeOverlays } = useLayout();
   const isMobile = useMediaQuery("(max-width: 768px)");
-  const overlayVisible = (isMobile && sidebarOpen) || (isTabletOrBelow && contextOpen);
+  const overlayVisible = isMobile && sidebarOpen;
 
   useEffect(() => {
     if (!overlayVisible) return undefined;
@@ -41,9 +41,10 @@ export default function AppShell() {
         <Header />
         <Sidebar />
         <main id="main-workspace" className="main-workspace" tabIndex={-1}>
+          <DevProfileNotice />
+          <SessionNotice />
           <Outlet />
         </main>
-        <ContextPanel />
       </div>
       {overlayVisible ? (
         <button

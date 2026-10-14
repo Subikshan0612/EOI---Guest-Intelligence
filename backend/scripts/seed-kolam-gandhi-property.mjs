@@ -24,6 +24,8 @@
  * The target workspace must already exist (KOI_DEV_WORKSPACE_SLUG, default
  * "dev-workspace"); this script never creates one.
  */
+import { requireLoopbackDatabase } from "../src/config/mongoSafety.js";
+requireLoopbackDatabase("seed-kolam-gandhi-property"); // never silently operate on a remote database (see src/config/mongoSafety.js)
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
 import { Property, Unit, Workspace } from "../src/models/index.js";
 import { createProperty } from "../src/services/propertyService.js";

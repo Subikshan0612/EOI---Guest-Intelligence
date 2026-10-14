@@ -8,6 +8,7 @@ import { useGuestDetail } from "../features/operations/useGuestDetail";
 import { formatGuestName, mapPropertyFromApi, mapUnitFromApi } from "../features/operations/operationsMapping";
 import { KOI_WORKSPACE_ID, isWorkspaceConfigured } from "../config/workspace";
 import * as koiApi from "../services/api";
+import RetryButton from "../components/auth/RetryButton";
 
 /**
  * Resolves property/unit names for display in the stay list. Kept local to
@@ -102,9 +103,7 @@ export default function GuestDetailPage() {
           <p className="page-kicker">Operations</p>
           <h1 className="page-title">Couldn’t load this guest</h1>
           <p className="page-lead">{error}</p>
-          <button type="button" className="text-button" onClick={reload}>
-            Try again
-          </button>
+          <RetryButton onClick={reload} />
         </section>
       </article>
     );
@@ -211,9 +210,7 @@ export default function GuestDetailPage() {
         ) : staysStatus === "error" ? (
           <section className="investigation-state" role="alert">
             <p className="page-lead">{staysError || "Could not load stays."}</p>
-            <button type="button" className="text-button" onClick={reloadStays}>
-              Try again
-            </button>
+            <RetryButton onClick={reloadStays} />
           </section>
         ) : stays.length === 0 ? (
           <p className="muted">No stays recorded yet. Add the first one above.</p>

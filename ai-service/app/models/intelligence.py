@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.context import SignalContext
 from app.models.retrieval import KnowledgeScope
+from app.models.visibility import Visibility
 
 RiskLevel = Literal["low", "medium", "high", "critical"]
 ActionPriority = Literal["low", "medium", "high"]
@@ -41,6 +42,9 @@ class KnowledgeItem(BaseModel):
     knowledgeDocumentId: str = Field(min_length=1)
     version: int = Field(ge=1)
     scope: KnowledgeScope
+    # The chunk's own visibility, assigned by Node. Required so an item that
+    # does not say what it is can never be treated as shareable.
+    visibility: Visibility
     section: str = ""
     # Ordered headings from outermost ancestor to `section`; empty when the
     # chunk has no known hierarchy. Display context only - never part of `text`.
@@ -59,6 +63,9 @@ class IntelligenceRequest(BaseModel):
     # (Phase 6G returned zero results, or knowledge retrieval was never
     # run) must remain fully supported, not treated as a degraded request.
     knowledge: list[KnowledgeItem] = Field(default_factory=list)
+    # The level Node authorized this request for; knowledge above it is
+    # dropped before any prompt is built. Defaults to the lowest level.
+    authorizedLevel: Visibility = "guest"
 
 
 class Risk(BaseModel):

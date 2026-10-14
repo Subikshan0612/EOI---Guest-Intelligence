@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.main import app
-from app.services.deterministic_embedding import generate_deterministic_embeddings
+from app.services.deterministic_embedding import TEST_EMBEDDING_MODEL, generate_deterministic_embeddings
 from app.services.vector_math import cosine_similarity
 
 client = TestClient(app)
@@ -32,7 +32,7 @@ def embed(text: str) -> list[float]:
 
 
 def candidate(chunk_id: str, text: str, scope: str) -> dict:
-    return {"chunkId": chunk_id, "embedding": embed(text), "scope": scope}
+    return {"chunkId": chunk_id, "embedding": embed(text), "scope": scope, "visibility": "guest", "embeddingModel": TEST_EMBEDDING_MODEL}
 
 
 # =========================================================
@@ -258,7 +258,8 @@ def test_results_match_direct_cosine_similarity_computation():
         json={
             "queryText": query_text,
             "candidates": [
-                {"chunkId": cid, "embedding": vec, "scope": "workspace"} for cid, vec in candidates_by_id.items()
+                {"chunkId": cid, "embedding": vec, "scope": "workspace", "visibility": "guest", "embeddingModel": TEST_EMBEDDING_MODEL}
+                for cid, vec in candidates_by_id.items()
             ],
         },
     )
@@ -278,6 +279,62 @@ def test_response_reports_the_embedding_model_used():
         json={"queryText": "x", "candidates": [candidate("c1", "x", "unit")]},
     )
     assert response.json()["model"] == "deterministic-embedding-v1"
+
+
+# =========================================================
+# PHASE 25 - EMBEDDING COMPATIBILITY (model + dimension)
+# =========================================================
+
+
+def _post(candidates, query="AC not cooling"):
+    return client.post("/v1/knowledge-retrieval", json={"queryText": query, "candidates": candidates})
+
+
+def test_missing_embedding_model_is_rejected():
+    bad = candidate("c1", "x", "unit")
+    del bad["embeddingModel"]
+    assert _post([bad]).status_code == 422
+
+
+def test_candidate_from_another_embedding_model_is_never_scored():
+    other_model = {**candidate("other", "AC not cooling", "unit"), "embeddingModel": "some-other-embedding-model"}
+    same_model = candidate("same", "AC not cooling", "workspace")
+    body = _post([other_model, same_model]).json()
+    assert [r["chunkId"] for r in body["results"]] == ["same"]
+    assert body["evaluatedCandidates"] == 2 and body["incompatibleCandidates"] == 1
+
+
+def test_candidate_with_a_different_dimension_is_never_scored_and_does_not_fail_the_request():
+    wrong_dimension = {**candidate("wide", "x", "unit"), "embedding": [0.5] * 64}
+    ok = candidate("ok", "AC not cooling", "workspace")
+    body = _post([wrong_dimension, ok]).json()
+    assert [r["chunkId"] for r in body["results"]] == ["ok"]
+    assert body["incompatibleCandidates"] == 1
+
+
+def test_a_dimension_mismatch_cannot_be_hidden_behind_a_matching_model_label():
+    # the label says "deterministic-embedding-v1" but the vector is 3-dimensional: still incompatible
+    liar = {**candidate("liar", "x", "unit"), "embedding": [1.0, 0.0, 0.0]}
+    body = _post([liar]).json()
+    assert body["results"] == [] and body["evaluatedCandidates"] == 1 and body["incompatibleCandidates"] == 1
+
+
+def test_all_candidates_incompatible_returns_no_results_and_says_so():
+    a = {**candidate("a", "x", "unit"), "embeddingModel": "old-model"}
+    b = {**candidate("b", "y", "workspace"), "embeddingModel": "old-model"}
+    body = _post([a, b]).json()
+    assert body["results"] == [] and body["evaluatedCandidates"] == 2 and body["incompatibleCandidates"] == 2
+
+
+def test_compatible_candidates_report_zero_incompatible():
+    body = _post([candidate("a", "x", "unit"), candidate("b", "y", "workspace")]).json()
+    assert body["evaluatedCandidates"] == 2 and body["incompatibleCandidates"] == 0 and len(body["results"]) == 2
+
+
+def test_the_python_service_applies_no_relevance_threshold_of_its_own():
+    # relevance filtering is Node's (server-side, authoritative); a scored candidate is always returned here
+    body = _post([candidate("far", "completely unrelated text about something else", "workspace")]).json()
+    assert len(body["results"]) == 1
 
 
 def test_no_mongo_import_in_retrieval_router():

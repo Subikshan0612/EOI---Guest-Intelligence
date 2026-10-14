@@ -15,6 +15,7 @@
  * which chunks + embeds a document exactly like validate-knowledge-
  * embedding.mjs already does) — started with EMBEDDING_PROVIDER=test.
  */
+import "./lib/authFetch.mjs";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -458,7 +459,7 @@ async function main() {
     "POST",
     "/knowledge-documents",
     { workspaceId: wsB, title: "Hijack attempt", documentType: "sop", content: "x", supersedesId: superV3Id, isTestData: true },
-    400,
+    404,
   );
   if (crossWsSupersedeRes.json?.data === undefined) ok("7FD1.13: rejected cross-workspace supersession created nothing");
   else fail("7FD1.13: rejected cross-workspace supersession created nothing", JSON.stringify(crossWsSupersedeRes.json));
@@ -535,8 +536,11 @@ async function main() {
   // =========================================================
   await expectStatus("7FD1.15: chunk the document", "POST", `/knowledge-documents/${manualId}/chunks?workspaceId=${wsA}`, null, 201);
   const embedRes = await expectStatus("7FD1.15: embed the document", "POST", `/knowledge-documents/${manualId}/embeddings?workspaceId=${wsA}`, null, 201);
+// Phase 14: chunk HTTP responses no longer carry embedding vectors, so vectors are verified where they live (MongoDB).
   const chunksRes = await request("GET", `/knowledge-documents/${manualId}/chunks?workspaceId=${wsA}`);
-  const allEmbedded = (chunksRes.json?.data || []).length > 0 && (chunksRes.json.data).every((c) => Array.isArray(c.embedding) && c.embedding.length > 0);
+  await connectDatabase();
+  const storedChunks = await KnowledgeChunk.find({ documentId: manualId }).select("+embedding").lean();
+  const allEmbedded = (chunksRes.json?.data || []).length > 0 && storedChunks.length === chunksRes.json.data.length && storedChunks.every((c) => Array.isArray(c.embedding) && c.embedding.length > 0);
   if (allEmbedded) ok("7FD1.15: chunking + embedding still work end-to-end on a 7F-D1-created document");
   else fail("7FD1.15: chunking + embedding still work end-to-end on a 7F-D1-created document", JSON.stringify({ embedRes: embedRes.json, chunksRes: chunksRes.json }));
 

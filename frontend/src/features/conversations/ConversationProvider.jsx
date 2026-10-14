@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { conversations as seedConversations } from "../../data/mockData";
 import { createLocalId } from "../chat/conversationSession";
+import { INTELLIGENCE_MESSAGE_TYPE } from "../intelligence/intelligenceContract";
 import { KOI_WORKSPACE_ID, isWorkspaceConfigured } from "../../config/workspace";
 import * as koiApi from "../../services/api";
 import { ConversationContext } from "./conversationContext";
@@ -214,7 +215,12 @@ export function ConversationProvider({ children }) {
         ),
       );
 
-      if (!backend) {
+      // Assistant / intelligence messages are SERVER-OWNED: the backend accepts only user text messages from a
+      // browser (a browser must not be able to manufacture AI/system content in a shared conversation). The
+      // locally generated (mock) reply is therefore kept in this session only and is not persisted.
+      const serverOwned = input.type === INTELLIGENCE_MESSAGE_TYPE || (input.role && input.role !== "user");
+
+      if (!backend || serverOwned) {
         const finalMessage = { ...optimistic, pending: false };
         commit((current) =>
           current.map((c) =>

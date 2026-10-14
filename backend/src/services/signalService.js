@@ -18,6 +18,7 @@ import {
   requireFields,
   toPlain,
 } from "./queryHelpers.js";
+import { extractStructuredIssue } from "./structuredIssue.js";
 
 const UPDATABLE = [
   "propertyId",
@@ -114,6 +115,8 @@ export async function createSignal(body) {
     occurredAt: body.occurredAt,
     detectedAt: body.detectedAt,
     metadata: body.metadata,
+    // L1.3: derived by the server from the Signal's own words; a client-supplied `issue` is never read (this object lists every accepted field)
+    issue: extractStructuredIssue({ title: body.title, description: body.description, severity: body.severity ?? "medium" }),
   });
 
   return toPlain(signal);
@@ -182,6 +185,10 @@ export async function updateSignal(id, body, workspaceId) {
   });
 
   Object.assign(signal, updates);
+  // L1.3: the structured issue follows the words it was derived from. `issue` itself is not updatable; it is re-derived by the server whenever the title, description or severity changes.
+  if (["title", "description", "severity"].some((key) => updates[key] !== undefined)) {
+    signal.issue = extractStructuredIssue({ title: signal.title, description: signal.description, severity: signal.severity });
+  }
   await signal.save();
   return toPlain(signal);
 }

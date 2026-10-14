@@ -29,7 +29,9 @@ export async function assertExists(Model, id, label = "Resource") {
 export function assertSameWorkspace(document, workspaceId, label = "Resource") {
   if (!document || !workspaceId) return;
   if (String(document.workspaceId) !== String(workspaceId)) {
-    throw new AppError(`${label} does not belong to the given workspace`, 400);
+    // Phase 21: a valid id that belongs to ANOTHER workspace must be indistinguishable from an id that does not exist
+    // (same status, same message), so a caller cannot learn that a foreign tenant's object exists.
+    throw new AppError(`${label} not found`, 404);
   }
 }
 

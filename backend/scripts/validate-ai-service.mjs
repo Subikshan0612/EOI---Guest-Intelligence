@@ -1,8 +1,13 @@
 /**
  * Phase 5 Step 3 validation: Node -> Python AI service deterministic contract.
  *
+ * PHASE 24: driven through the ONE generation route, POST /api/intelligence/analyze/:signalId (the legacy
+ * POST /api/signals/:id/intelligence and its Node-level providers were retired). Its response is the sanitized public
+ * view, so provider/model are asserted from the STORED record. Each delegation check uses a FRESH Signal, because a
+ * repeated request for the same (Signal, level) returns the stored analysis without contacting Python at all.
+ *
  * Requires a running Python AI service (ai-service/) reachable at PYTHON_BASE
- * (default http://localhost:8000). Its /v1/intelligence/signal endpoint is a
+ * (default http://localhost:8000). Its /v1/intelligence/analyze endpoint is a
  * deterministic stub — it never calls Gemini or any other model — so this
  * script never consumes AI provider credits and never depends on a real key.
  *
@@ -10,6 +15,7 @@
  * process with LLM_PROVIDER=test-python (or a deliberately broken
  * AI_SERVICE_URL) set as an env override — backend/.env is never touched.
  */
+import "./lib/authFetch.mjs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -112,30 +118,29 @@ async function withEphemeralServer(port, envOverrides, fn) {
   }
 }
 
-function assertValidIntelligenceShape(name, data) {
+const CONFIDENCE_LEVELS = ["high", "medium", "low"];
+
+function assertValidAnalysisShape(name, data) {
   const problems = [];
-  if (typeof data?.summary !== "string" || !data.summary.trim()) problems.push("summary");
-  if (!Array.isArray(data?.findings)) problems.push("findings");
-  if (!RISK_LEVELS.includes(data?.risk?.level)) problems.push("risk.level");
-  if (typeof data?.risk?.reason !== "string" || !data.risk.reason.trim()) problems.push("risk.reason");
-  if (typeof data?.decision?.recommendation !== "string" || !data.decision.recommendation.trim()) {
-    problems.push("decision.recommendation");
-  }
-  if (typeof data?.action?.label !== "string" || !data.action.label.trim()) problems.push("action.label");
-  if (
-    !Array.isArray(data?.action?.recommended) ||
-    !data.action.recommended.every((step) => ACTION_PRIORITIES.includes(step?.priority))
-  ) {
-    problems.push("action.recommended");
-  }
-  if (typeof data?.outcome?.expected !== "string") problems.push("outcome.expected");
-  if (typeof data?.confidence !== "number" || data.confidence < 0 || data.confidence > 1) {
-    problems.push("confidence");
-  }
-  if (!data?.provenance?.provider || !data?.provenance?.model) problems.push("provenance");
+  const a = data?.analysis;
+  if (typeof a?.situation !== "string" || !a.situation.trim()) problems.push("analysis.situation");
+  if (!Array.isArray(a?.evidence) || a.evidence.length === 0) problems.push("analysis.evidence");
+  if (typeof a?.impact !== "string" || !a.impact.trim()) problems.push("analysis.impact");
+  if (typeof a?.recommendation !== "string" || !a.recommendation.trim()) problems.push("analysis.recommendation");
+  if (!CONFIDENCE_LEVELS.includes(a?.confidence)) problems.push("analysis.confidence");
+  if (data?.analysisVersion !== "intelligence-v1") problems.push("analysisVersion");
+  if (!data?.analysisLevel) problems.push("analysisLevel");
+  if ("provider" in (data || {}) || "model" in (data || {})) problems.push("provider/model must not be public");
 
   if (problems.length) fail(name, `missing/invalid: ${problems.join(", ")}`);
   else ok(name);
+}
+
+async function storedRecord(id) {
+  await connectDatabase();
+  const doc = await Intelligence.findById(id).lean();
+  await disconnectDatabase();
+  return doc;
 }
 
 async function cleanup() {
@@ -167,6 +172,7 @@ async function main() {
   let signalA;
   let wsB;
   let signalB;
+  const freshSignals = {};
 
   await withEphemeralServer(
     5064,
@@ -212,58 +218,38 @@ async function main() {
       );
       signalB = trackCreated(signalBRes, "signalIds");
 
+      // Fresh Signals for the delegation checks that must reach Python (no stored analysis yet).
+      for (const label of ["5.5", "5.6", "5.8"]) {
+        const res = await expectStatus(base, `5: signal for ${label} create`, "POST", "/signals", { workspaceId: wsA, type: "maintenance", severity: "medium", title: `Fresh signal ${label}` }, 201);
+        freshSignals[label] = trackCreated(res, "signalIds");
+      }
+
       // === Valid generate via test-python -> Python deterministic stub ===
       const validRes = await expectStatus(
         base,
         "5.1: valid generate via test-python",
         "POST",
-        `/signals/${signalA}/intelligence?workspaceId=${wsA}`,
+        `/intelligence/analyze/${signalA}?workspaceId=${wsA}`,
         null,
-        200,
+        201,
       );
-      assertValidIntelligenceShape("5.1: structured shape valid", validRes.json?.data);
-      // "test" is Python's own honest self-report (its LLM_PROVIDER default)
-      // — Node's "test-python" env value only means "delegate to Python"
-      // (Phase 5 Step 4: Node relays Python's real provenance rather than
-      // hard-coding a label).
-      if (validRes.json?.data?.provenance?.provider === "test") {
-        ok("5.1: provenance honestly reports Python's own provider (test)");
-      } else {
-        fail("5.1: provenance honestly reports Python's own provider (test)", JSON.stringify(validRes.json?.data?.provenance));
-      }
-      if (validRes.json?.data?.provenance?.model === "deterministic-stub") {
-        ok("5.1: provenance reports the deterministic-stub model");
-      } else {
-        fail("5.1: provenance reports the deterministic-stub model", JSON.stringify(validRes.json?.data?.provenance));
-      }
-      if (validRes.json?.data?.summary?.includes("AC not cooling")) {
-        ok("5.1: response is grounded in the actual Signal's own title");
-      } else {
-        fail("5.1: response is grounded in the actual Signal's own title", validRes.json?.data?.summary);
-      }
+      assertValidAnalysisShape("5.1: structured V1 shape valid", validRes.json?.data);
+      // "test" is Python's own honest self-report (its LLM_PROVIDER default) - Node's "test-python" env value only
+      // means "delegate to Python" (Node relays Python's real provenance rather than hard-coding a label).
+      const stored = await storedRecord(validRes.json?.data?._id);
+      if (stored?.provider === "test") ok("5.1: the STORED provenance honestly reports Python's own provider (test)");
+      else fail("5.1: the STORED provenance honestly reports Python's own provider (test)", JSON.stringify({ provider: stored?.provider }));
+      if (stored?.model === "deterministic-stub") ok("5.1: the STORED provenance reports the deterministic-stub model");
+      else fail("5.1: the STORED provenance reports the deterministic-stub model", JSON.stringify({ model: stored?.model }));
+      if (validRes.json?.data?.analysis?.situation?.includes("AC not cooling")) ok("5.1: response is grounded in the actual Signal's own title");
+      else fail("5.1: response is grounded in the actual Signal's own title", validRes.json?.data?.analysis?.situation);
 
-      // === Determinism: the same signal generates identical CONTENT twice ===
-      // Phase 7F-C: each generation now persists its own Intelligence record,
-      // so `_id`/`createdAt` legitimately differ between the two calls even
-      // though the deterministic stub's actual content does not — those two
-      // identity fields are excluded from the comparison below rather than
-      // the whole response, so this still genuinely verifies determinism of
-      // generation, not persistence identity.
-      const secondRes = await request(base, "POST", `/signals/${signalA}/intelligence?workspaceId=${wsA}`, null);
-      const stripIdentity = ({ _id, createdAt, ...rest }) => rest;
-      if (
-        validRes.json?.data &&
-        secondRes.json?.data &&
-        JSON.stringify(stripIdentity(secondRes.json.data)) === JSON.stringify(stripIdentity(validRes.json.data))
-      ) {
-        ok("5.2: repeated generation is deterministic (identical content)");
+      // === Idempotency: the same (Signal, level) returns the STORED analysis (no second generation) ===
+      const secondRes = await request(base, "POST", `/intelligence/analyze/${signalA}?workspaceId=${wsA}`, null);
+      if (secondRes.status === 200 && secondRes.json?.data?._id === validRes.json?.data?._id && JSON.stringify(secondRes.json.data) === JSON.stringify(validRes.json.data)) {
+        ok("5.2: a repeated request returns the same stored analysis (200), identical content");
       } else {
-        fail("5.2: repeated generation is deterministic (identical content)");
-      }
-      if (secondRes.json?.data?._id && secondRes.json.data._id !== validRes.json?.data?._id) {
-        ok("5.2b: repeated generation persists a distinct Intelligence record each time");
-      } else {
-        fail("5.2b: repeated generation persists a distinct Intelligence record each time", JSON.stringify(secondRes.json?.data?._id));
+        fail("5.2: a repeated request returns the same stored analysis (200), identical content", `status ${secondRes.status}`);
       }
 
       // === Tenant boundary: enforced BEFORE Python is ever reached ===
@@ -271,7 +257,7 @@ async function main() {
         base,
         "5.3: A cannot generate intelligence for B's signal (test-python mode)",
         "POST",
-        `/signals/${signalB}/intelligence?workspaceId=${wsA}`,
+        `/intelligence/analyze/${signalB}?workspaceId=${wsA}`,
         null,
         404,
       );
@@ -281,7 +267,7 @@ async function main() {
         base,
         "5.4: missing workspaceId still rejected in test-python mode",
         "POST",
-        `/signals/${signalA}/intelligence`,
+        `/intelligence/analyze/${signalA}`,
         null,
         400,
       );
@@ -295,7 +281,7 @@ async function main() {
       base,
       "5.5: test-python without AI_SERVICE_URL -> not configured",
       "POST",
-      `/signals/${signalA}/intelligence?workspaceId=${wsA}`,
+      `/intelligence/analyze/${freshSignals["5.5"]}?workspaceId=${wsA}`,
       null,
       503,
     );
@@ -310,7 +296,7 @@ async function main() {
         base,
         "5.6: unreachable Python service surfaced as a safe application error",
         "POST",
-        `/signals/${signalA}/intelligence?workspaceId=${wsA}`,
+        `/intelligence/analyze/${freshSignals["5.6"]}?workspaceId=${wsA}`,
         null,
         502,
       );
@@ -326,7 +312,7 @@ async function main() {
 
   // === Phase 5 Step 4 correction: LLM_PROVIDER=gemini delegates to Python
   // identically to LLM_PROVIDER=test-python. This proves "gemini" is no
-  // longer a direct Node->Gemini call (llmProvider.js) — it now reaches the
+  // longer a direct Node->Gemini call - it reaches the
   // same aiServiceClient.js -> Python path, confirmed by getting back
   // Python's own honestly-reported provenance (Python's LLM_PROVIDER default
   // is "test", so the deterministic stub runs — no real Gemini call is made
@@ -337,20 +323,18 @@ async function main() {
     async (base) => {
       const res = await expectStatus(
         base,
-        "5.8: LLM_PROVIDER=gemini delegates to Python (not the direct llmProvider.js path)",
+        "5.8: LLM_PROVIDER=gemini delegates to Python (Node has no direct provider path any more)",
         "POST",
-        `/signals/${signalA}/intelligence?workspaceId=${wsA}`,
+        `/intelligence/analyze/${freshSignals["5.8"]}?workspaceId=${wsA}`,
         null,
-        200,
+        201,
       );
-      assertValidIntelligenceShape("5.8: structured shape valid", res.json?.data);
-      if (res.json?.data?.provenance?.provider === "test") {
-        ok("5.8: provenance is Python's own honest self-report, proving delegation occurred");
+      assertValidAnalysisShape("5.8: structured V1 shape valid", res.json?.data);
+      const stored8 = await storedRecord(res.json?.data?._id);
+      if (stored8?.provider === "test") {
+        ok("5.8: the STORED provenance is Python's own honest self-report, proving delegation occurred");
       } else {
-        fail(
-          "5.8: provenance is Python's own honest self-report, proving delegation occurred",
-          JSON.stringify(res.json?.data?.provenance),
-        );
+        fail("5.8: the STORED provenance is Python's own honest self-report, proving delegation occurred", JSON.stringify({ provider: stored8?.provider }));
       }
 
       // Tenant/context validation still happens in Node, before Python is
@@ -359,7 +343,7 @@ async function main() {
         base,
         "5.9: tenant isolation still enforced in Node before Python (gemini trigger)",
         "POST",
-        `/signals/${signalB}/intelligence?workspaceId=${wsA}`,
+        `/intelligence/analyze/${signalB}?workspaceId=${wsA}`,
         null,
         404,
       );

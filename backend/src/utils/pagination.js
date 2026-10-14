@@ -3,12 +3,12 @@ import { AppError } from "./AppError.js";
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
-export function parsePagination(query = {}) {
+export function parsePagination(query = {}, maxLimit = MAX_LIMIT) {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
   let limit = Number.parseInt(query.limit, 10) || DEFAULT_LIMIT;
 
   if (limit < 1) limit = DEFAULT_LIMIT;
-  if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+  if (limit > maxLimit) limit = maxLimit;
 
   const skip = (page - 1) * limit;
 

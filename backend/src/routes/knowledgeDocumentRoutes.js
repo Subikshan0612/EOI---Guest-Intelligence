@@ -1,5 +1,9 @@
 import { Router } from "express";
 import multer from "multer";
+import { authenticatedPrelude, requireAccess } from "../auth/authorize.js";
+import { aiWorkspaceLimiter } from "../middleware/rateLimit.js";
+import { requireWorkspaceMembership } from "../auth/membership.js";
+import { requirePermission } from "../auth/authorize.js";
 import { AppError } from "../utils/AppError.js";
 import {
   chunkKnowledgeDocument,
@@ -23,7 +27,8 @@ const knowledgeDocumentRoutes = Router();
 // which this route doesn't use at all.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  // fileSize 10 MB; one file; a few small text fields (metadata), each <= 100 KB.
+  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 20, fieldSize: 100 * 1024, parts: 30 },
 });
 
 /**
@@ -45,27 +50,41 @@ function handleUpload(req, res, next) {
   });
 }
 
-knowledgeDocumentRoutes.post("/", createKnowledgeDocument);
-knowledgeDocumentRoutes.get("/", listKnowledgeDocuments);
+// KNOWLEDGE MANAGEMENT (create, edit, delete, chunk, embed, upload, visibility) is ADMIN-ONLY:
+// bearer -> active membership -> workspace:admin. Changing a document's visibility changes
+// what retrieval can expose, so it is never a lower-trust act. The workspace a request names is
+// only a selection (a JSON/form body field for creates and uploads, the ?workspaceId= query for
+// the rest); the verified membership decides.
+const manage = (getWorkspaceId, options) => requireAccess("workspace:admin", getWorkspaceId, options);
+// Routes that reach the AI service (auto chunk + embed after create, embeddings) use the stricter AI rate-limit tier.
+const manageAi = (getWorkspaceId) => manage(getWorkspaceId, { tier: "ai" });
+const fromBody = (req) => req.body?.workspaceId;
+
+knowledgeDocumentRoutes.post("/", ...manageAi(fromBody), createKnowledgeDocument);
+// READS: authenticated, intelligence:view, the role's knowledge ceiling, the verified workspace.
+const readAccess = () => requireAccess("intelligence:view");
+knowledgeDocumentRoutes.get("/", ...readAccess(), listKnowledgeDocuments);
 
 // Phase 7F-D2 — dedicated upload endpoint, deliberately separate from the
 // manual-entry POST / above rather than overloading it. Defined before the
 // generic /:id routes below, same reasoning as the chunk/embeddings routes.
-knowledgeDocumentRoutes.post("/upload", handleUpload, uploadKnowledgeDocument);
+// authenticate BEFORE the multipart parser (an unauthenticated body is never parsed); the workspace
+// field is inside the form, so membership is resolved after it.
+knowledgeDocumentRoutes.post("/upload", ...authenticatedPrelude({ tier: "ai" }), handleUpload, requireWorkspaceMembership(fromBody), requirePermission("workspace:admin"), aiWorkspaceLimiter, uploadKnowledgeDocument);
 
 // Phase 6D — nested chunk sub-resource, same shape as
 // conversationRoutes.js's /:conversationId/messages: POST (re)builds,
 // GET reads back. Defined before the generic /:id routes below.
-knowledgeDocumentRoutes.post("/:documentId/chunks", chunkKnowledgeDocument);
-knowledgeDocumentRoutes.get("/:documentId/chunks", listKnowledgeChunks);
+knowledgeDocumentRoutes.post("/:documentId/chunks", ...manage(), chunkKnowledgeDocument);
+knowledgeDocumentRoutes.get("/:documentId/chunks", ...readAccess(), listKnowledgeChunks);
 
 // Phase 6E — embeds the document's existing chunks. No GET counterpart:
 // GET .../chunks above already returns each chunk's embedding/embeddingModel,
 // so a second read endpoint would be redundant.
-knowledgeDocumentRoutes.post("/:documentId/embeddings", embedKnowledgeDocument);
+knowledgeDocumentRoutes.post("/:documentId/embeddings", ...manageAi(), embedKnowledgeDocument);
 
-knowledgeDocumentRoutes.get("/:id", getKnowledgeDocument);
-knowledgeDocumentRoutes.patch("/:id", updateKnowledgeDocument);
-knowledgeDocumentRoutes.delete("/:id", deleteKnowledgeDocument);
+knowledgeDocumentRoutes.get("/:id", ...readAccess(), getKnowledgeDocument);
+knowledgeDocumentRoutes.patch("/:id", ...manage(), updateKnowledgeDocument);
+knowledgeDocumentRoutes.delete("/:id", ...manage(), deleteKnowledgeDocument);
 
 export { knowledgeDocumentRoutes };

@@ -16,4 +16,20 @@ Thumbs.db
 *.temp
 
 # Real evaluation inputs (operational exports + business SOPs) — never commit
-data/
+/data/
+
+# Downloaded OAuth client files contain a client SECRET - never commit
+client_secret*.json
+*.apps.googleusercontent.com.json
+
+# Generated evaluation / benchmark output: captured model and embedding results, scores and run logs. Never commit.
+# (The two freeze-hash records below are READ by validate-learning-l1-4-effectiveness, so they stay in the repository.)
+backend/evaluation/results/
+backend/scripts/phase41/out/
+backend/scripts/l14/out/
+backend/scripts/phase53/out*/*
+!backend/scripts/phase53/out2/rubric2.sha256
+!backend/scripts/phase53/out3/rubric3.sha256
+docs/architecture/*.json
+__pycache__/
+*.pyc

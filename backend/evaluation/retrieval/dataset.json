@@ -1,0 +1,438 @@
+{
+  "datasetVersion": "1.0.0",
+  "name": "EOI retrieval evaluation set (synthetic)",
+  "notice": "SYNTHETIC EVALUATION KNOWLEDGE. Every document, signal and label in this file was written for offline testing of the retrieval pipeline. Nothing here is a real policy, procedure, property or guest, and no production data or personal data is used. The relevance labels are the project's own evaluation annotations, not objective truth.",
+  "labelScale": {
+    "0": "irrelevant: does not help an operator handle this signal (a listed grade-0 chunk is an explicit distractor)",
+    "1": "related but insufficient: same subject area, but does not contain the applicable procedure",
+    "2": "relevant / useful: contains guidance an operator would want in front of them for this signal",
+    "3": "directly applicable / decisive: the procedure that answers the operational need"
+  },
+  "binaryRelevanceRule": "A chunk is RELEVANT for Recall@K, MRR and hit rate when its grade is >= 2. Grades 0-3 are all used for nDCG (gain = 2^grade - 1). A case whose labels contain no grade >= 2 chunk is a no-relevant-knowledge case.",
+  "corpus": {
+    "documents": [
+      {
+        "key": "ac-troubleshooting",
+        "workspace": "eval",
+        "title": "Air Conditioning Failure Handling",
+        "documentType": "sop",
+        "visibility": "staff",
+        "content": "# Air Conditioning Failure Handling\n\n## Cooling failure first checks\n\nWhen a unit reports that the air conditioner is not cooling, check that the thermostat mode is set to cool and the set point is below the room temperature, confirm the filter is not blocked, and confirm the outdoor unit has power. If these checks do not restore cooling within 20 minutes, raise a maintenance work order marked urgent and offer the guest a portable fan.\n\n## Noisy or leaking air conditioner\n\nA rattling noise or water dripping from the indoor unit usually indicates a loose panel or a blocked condensate drain. Place a towel under the unit, switch the unit off, and schedule a technician visit the same day.\n"
+      },
+      {
+        "key": "ac-preventive",
+        "workspace": "eval",
+        "title": "Air Conditioning Preventive Maintenance Schedule",
+        "documentType": "policy",
+        "visibility": "staff",
+        "content": "# Air Conditioning Preventive Maintenance Schedule\n\n## Quarterly filter cleaning\n\nAir conditioning filters in every unit are cleaned every three months by the maintenance team. Record the date on the unit maintenance log.\n\n## Annual servicing\n\nA technician services the indoor and outdoor air conditioning units once a year, including gas pressure checks and coil cleaning.\n"
+      },
+      {
+        "key": "plumbing-leaks",
+        "workspace": "eval",
+        "title": "Water Leak and Plumbing Response",
+        "documentType": "sop",
+        "visibility": "staff",
+        "content": "# Water Leak and Plumbing Response\n\n## Active water leak\n\nIf water is actively leaking from a ceiling, pipe or fixture, close the isolation valve for the unit, move guests and belongings away from the wet area, and call the on-call plumber. Log the units below the leak for inspection.\n\n## Low water pressure\n\nReports of weak shower pressure are checked at the pressure regulator and the tap aerators. Aerators are descaled during routine housekeeping.\n\n## Hot water not available\n\nIf a unit has no hot water, check the water heater switch and the circuit breaker, then inform the technician if the heater does not restart. Offer the guest a temporary alternative unit if the repair will take longer than four hours.\n"
+      },
+      {
+        "key": "access-keys",
+        "workspace": "eval",
+        "title": "Guest Access and Key Cards",
+        "documentType": "procedure",
+        "visibility": "staff",
+        "content": "# Guest Access and Key Cards\n\n## Key card not working\n\nWhen a guest reports that the room key card does not open the door, verify the guest's identity at the front desk, encode a new key card for the current stay dates, and test the card at the door. Record the reissue in the key log.\n\n## Lost key card\n\nA lost key card is deactivated immediately and a replacement is issued after identity verification. A replacement fee may apply according to the property rate card.\n\n## Key handover at check-in\n\nKeys are handed over at check-in after the guest registration form is completed. Each guest receives two key cards.\n"
+      },
+      {
+        "key": "noise-complaints",
+        "workspace": "eval",
+        "title": "Noise and Disturbance Handling",
+        "documentType": "procedure",
+        "visibility": "staff",
+        "content": "# Noise and Disturbance Handling\n\n## Guest noise complaint\n\nWhen a guest complains about noise from a neighbouring unit, the duty manager phones the noisy unit first, requests quiet politely, and revisits after 15 minutes. If the noise continues after quiet hours begin at 10 pm, escalate to the property manager and consider relocating the complaining guest.\n\n## Construction and maintenance noise\n\nPlanned maintenance work that creates noise is scheduled between 10 am and 4 pm and announced at the front desk in advance.\n"
+      },
+      {
+        "key": "housekeeping",
+        "workspace": "eval",
+        "title": "Housekeeping Service Standards",
+        "documentType": "guideline",
+        "visibility": "staff",
+        "content": "# Housekeeping Service Standards\n\n## Delayed room cleaning\n\nIf a scheduled room cleaning has not started within two hours of the agreed time, the housekeeping supervisor assigns another attendant, informs the guest of the revised time, and records the delay.\n\n## Extra towels and amenities\n\nRequests for extra towels, pillows or toiletries are fulfilled within 30 minutes from the amenity store and logged.\n\n## Linen change frequency\n\nBed linen is changed every three days for stays longer than three nights, and towels are replaced daily on request.\n"
+      },
+      {
+        "key": "checkin-out",
+        "workspace": "eval",
+        "title": "Check-in and Check-out Timing",
+        "documentType": "policy",
+        "visibility": "staff",
+        "content": "# Check-in and Check-out Timing\n\n## Late checkout requests\n\nThe standard check-out time is 11 am. A guest may request a late checkout; the front desk approves it when the unit has no arrival the same day, up to 2 pm without charge and later at half the nightly rate.\n\n## Early check-in requests\n\nThe standard check-in time is 2 pm. Early check-in is offered when the unit is already cleaned and ready, subject to availability.\n"
+      },
+      {
+        "key": "payments",
+        "workspace": "eval",
+        "title": "Payment and Refund Handling",
+        "documentType": "policy",
+        "visibility": "staff",
+        "content": "# Payment and Refund Handling\n\n## Payment dispute\n\nWhen a guest disputes a charge, the front desk reviews the folio with the guest, confirms each line against the booking, and escalates unresolved disputes to the finance officer within one business day.\n\n## Refund processing\n\nApproved refunds are returned to the original payment method within seven working days. Cash refunds require manager approval.\n\n## Deposit handling\n\nSecurity deposits are held at check-in and released within three days after check-out when no damage is found.\n"
+      },
+      {
+        "key": "wifi",
+        "workspace": "eval",
+        "title": "Internet and Network Support",
+        "documentType": "sop",
+        "visibility": "staff",
+        "content": "# Internet and Network Support\n\n## Wi-Fi outage\n\nIf several units report that the internet is down, restart the property router and access points, check the internet service provider status, and inform guests of the expected restoration time. Escalate to the network vendor if the outage lasts longer than one hour.\n\n## Single device connection help\n\nIf only one guest cannot connect, ask them to forget and rejoin the network and to re-enter the password printed on the welcome card.\n"
+      },
+      {
+        "key": "lift",
+        "workspace": "eval",
+        "title": "Lift and Facilities",
+        "documentType": "sop",
+        "visibility": "staff",
+        "content": "# Lift and Facilities\n\n## Elevator outage\n\nWhen the passenger lift is out of service, place a sign at each floor, notify guests on the upper floors, arrange luggage assistance via the stairs, and call the lift contractor. Guests with mobility needs are moved to ground floor units where possible.\n\n## Common area lighting\n\nFailed corridor and stairwell lights are replaced within one working day.\n"
+      },
+      {
+        "key": "pest",
+        "workspace": "eval",
+        "title": "Pest Control",
+        "documentType": "procedure",
+        "visibility": "staff",
+        "content": "# Pest Control\n\n## Pest sighting\n\nFor a report of insects or rodents in a unit, apologise, offer to move the guest to another unit, isolate the affected unit, and book the pest control contractor. Do not re-let the unit until the contractor certifies it.\n\n## Routine pest prevention\n\nPest control treatment is performed monthly in kitchens and bin areas.\n"
+      },
+      {
+        "key": "safety",
+        "workspace": "eval",
+        "title": "Fire and Safety",
+        "documentType": "sop",
+        "visibility": "staff",
+        "content": "# Fire and Safety\n\n## Fire alarm activation\n\nOn any fire alarm, evacuate guests using the nearest stairwell, do not use the lift, hold a roll call at the assembly point and call the fire service. Only the safety officer may declare the building safe.\n\n## Smoke detector fault\n\nA smoke detector that chirps or shows a fault light is replaced by maintenance on the same day and the unit is tested.\n"
+      },
+      {
+        "key": "lost-found",
+        "workspace": "eval",
+        "title": "Lost Property",
+        "documentType": "procedure",
+        "visibility": "staff",
+        "content": "# Lost Property\n\n## Lost property report\n\nItems that are found are logged with their location and date and held in the lost property room for 30 days. Guests who report a missing item are asked for a description and a contact address.\n"
+      },
+      {
+        "key": "laundry",
+        "workspace": "eval",
+        "title": "Laundry Services",
+        "documentType": "policy",
+        "visibility": "staff",
+        "content": "# Laundry Services\n\n## Laundry damage claim\n\nIf a guest reports a garment damaged in the laundry, take photographs, obtain the guest's description, and pass the claim to the manager. Compensation is limited to a multiple of the laundry charge.\n\n## Laundry turnaround\n\nLaundry collected before 10 am is returned by 6 pm the same day.\n"
+      },
+      {
+        "key": "parking",
+        "workspace": "eval",
+        "title": "Parking and Transfers",
+        "documentType": "guideline",
+        "visibility": "staff",
+        "content": "# Parking and Transfers\n\n## Parking allocation\n\nOne parking bay is allocated per unit. Additional vehicles are charged per day and parked in the overflow area.\n\n## Airport transfer bookings\n\nAirport transfers must be booked 24 hours ahead through the front desk with the flight details.\n"
+      },
+      {
+        "key": "escalation-restricted",
+        "workspace": "eval",
+        "title": "Management Escalation Contacts",
+        "documentType": "procedure",
+        "visibility": "restricted",
+        "content": "# Management Escalation Contacts\n\n## Cooling failure escalation\n\nFor a repeated air conditioning failure the duty engineering manager may authorise emergency contractor call-out spend above the standard limit.\n"
+      },
+      {
+        "key": "foreign-ac",
+        "workspace": "foreign",
+        "title": "Air Conditioning Failure Handling (another tenant)",
+        "documentType": "sop",
+        "visibility": "guest",
+        "content": "# Air Conditioning Failure Handling (another tenant)\n\n## Cooling failure first checks\n\nWhen a unit reports that the air conditioner is not cooling, check that the thermostat mode is set to cool and the set point is below the room temperature, confirm the filter is not blocked, and confirm the outdoor unit has power. If these checks do not restore cooling within 20 minutes, raise a maintenance work order marked urgent and offer the guest a portable fan. FOREIGN-TENANT-EVALUATION-MARKER.\n"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "caseId": "direct_ac_01",
+      "category": "A_direct_semantic_match",
+      "signal": { "type": "maintenance", "title": "Air conditioner not cooling in unit 204", "description": "Guest reports warm air from the air conditioner and the room is uncomfortable." },
+      "labels": [
+        { "chunk": "ac-troubleshooting#Cooling failure first checks", "grade": 3, "rationale": "Contains the first checks and the escalation step for an air conditioner that is not cooling." },
+        { "chunk": "ac-preventive#Quarterly filter cleaning", "grade": 1, "rationale": "Same appliance and mentions filters, but describes a routine schedule, not the response to a failure." },
+        { "chunk": "ac-preventive#Annual servicing", "grade": 0, "kind": "near-topic", "rationale": "Scheduled servicing; does not tell an operator what to do about a failure now." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Plain match between the complaint and one procedure."
+    },
+    {
+      "caseId": "direct_leak_01",
+      "category": "A_direct_semantic_match",
+      "signal": { "type": "maintenance", "title": "Water leaking from bathroom ceiling", "description": "Water is dripping through the ceiling in the bathroom of unit 305." },
+      "labels": [
+        { "chunk": "plumbing-leaks#Active water leak", "grade": 3, "rationale": "Isolation valve, guest safety and plumber call-out for an active leak." },
+        { "chunk": "plumbing-leaks#Low water pressure", "grade": 0, "kind": "near-topic", "rationale": "Plumbing document, but about shower pressure." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Same document contains three plumbing sections; only one is applicable."
+    },
+    {
+      "caseId": "direct_key_01",
+      "category": "A_direct_semantic_match",
+      "signal": { "type": "guest_request", "title": "Key card does not open the room door", "description": "Guest cannot enter the room; the key card shows a red light at the door." },
+      "labels": [
+        { "chunk": "access-keys#Key card not working", "grade": 3, "rationale": "The reissue procedure for a card that does not open the door." },
+        { "chunk": "access-keys#Lost key card", "grade": 1, "rationale": "Related card handling, but for a lost card, not a card that does not work." },
+        { "chunk": "access-keys#Key handover at check-in", "grade": 0, "kind": "exact-keyword", "rationale": "Shares 'key' and 'guest' vocabulary; concerns check-in handover, not a failing card." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Includes an exact-keyword distractor inside the relevant document."
+    },
+    {
+      "caseId": "paraphrase_ac_01",
+      "category": "B_paraphrase",
+      "signal": { "type": "complaint", "title": "Room is too hot", "description": "The guest says the apartment will not get cold and asks for someone to look at the cooling." },
+      "labels": [
+        { "chunk": "ac-troubleshooting#Cooling failure first checks", "grade": 3, "rationale": "Applicable procedure; the signal never uses the words 'air conditioner' or 'not cooling'." },
+        { "chunk": "ac-preventive#Quarterly filter cleaning", "grade": 1, "rationale": "Related appliance maintenance only." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Different wording from the knowledge text."
+    },
+    {
+      "caseId": "paraphrase_pressure_01",
+      "category": "B_paraphrase",
+      "signal": { "type": "maintenance", "title": "Shower has almost no force", "description": "Guest says the water only trickles out of the shower head." },
+      "labels": [
+        { "chunk": "plumbing-leaks#Low water pressure", "grade": 3, "rationale": "Weak shower pressure: regulator and aerator checks." },
+        { "chunk": "plumbing-leaks#Active water leak", "grade": 0, "kind": "near-topic", "rationale": "Water problem, but nothing is leaking." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "'force' and 'trickles' replace 'pressure'."
+    },
+    {
+      "caseId": "paraphrase_noise_01",
+      "category": "B_paraphrase",
+      "signal": { "type": "complaint", "title": "Neighbours are very loud tonight", "description": "Guest in unit 410 cannot sleep because of loud music from next door." },
+      "labels": [
+        { "chunk": "noise-complaints#Guest noise complaint", "grade": 3, "rationale": "Duty manager steps and quiet-hours escalation." },
+        { "chunk": "noise-complaints#Construction and maintenance noise", "grade": 0, "kind": "near-topic", "rationale": "Noise, but planned work scheduling, not a guest disturbance." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Paraphrase of 'noise from a neighbouring unit'."
+    },
+    {
+      "caseId": "terminology_aircon_01",
+      "category": "C_terminology_variation",
+      "signal": { "type": "maintenance", "title": "Aircon unit dripping onto the floor", "description": "The split unit in the bedroom is dripping water." },
+      "labels": [
+        { "chunk": "ac-troubleshooting#Noisy or leaking air conditioner", "grade": 3, "rationale": "Dripping indoor unit: condensate drain, towel, same-day technician." },
+        { "chunk": "plumbing-leaks#Active water leak", "grade": 1, "rationale": "Water leaking, but for pipes and fixtures; the source here is an air conditioner." },
+        { "chunk": "ac-troubleshooting#Cooling failure first checks", "grade": 1, "rationale": "Same appliance, but the signal is a leak, not a cooling failure." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "'aircon' and 'split unit' instead of 'air conditioner' and 'indoor unit'."
+    },
+    {
+      "caseId": "terminology_linen_01",
+      "category": "C_terminology_variation",
+      "signal": { "type": "housekeeping", "title": "Need a top-up of bath linen", "description": "Guest asks for extra bath sheets and another pillow." },
+      "labels": [
+        { "chunk": "housekeeping#Extra towels and amenities", "grade": 3, "rationale": "Fulfilment of extra towels and pillows within 30 minutes." },
+        { "chunk": "housekeeping#Linen change frequency", "grade": 1, "rationale": "Linen replacement schedule, not an on-request top-up." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "'bath sheets' and 'bath linen' for 'towels'."
+    },
+    {
+      "caseId": "terminology_elevator_01",
+      "category": "C_terminology_variation",
+      "signal": { "type": "maintenance", "title": "Elevator has stopped working", "description": "The building elevator is stopped and a guest with heavy luggage is waiting on the sixth floor." },
+      "labels": [
+        { "chunk": "lift#Elevator outage", "grade": 3, "rationale": "Lift outage handling including luggage assistance." },
+        { "chunk": "lift#Common area lighting", "grade": 0, "kind": "near-topic", "rationale": "Same document, unrelated facility." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Elevator versus lift."
+    },
+    {
+      "caseId": "strong_distractor_filter_01",
+      "category": "D_strong_distractor",
+      "signal": { "type": "maintenance", "title": "Air conditioning filter blocked", "description": "Cooling is weak and the filter looks blocked with dust." },
+      "labels": [
+        { "chunk": "ac-troubleshooting#Cooling failure first checks", "grade": 3, "rationale": "Filter check is one of the first checks and the escalation is defined here." },
+        { "chunk": "ac-preventive#Quarterly filter cleaning", "grade": 1, "rationale": "Shares the filter topic but is a schedule; a strong distractor by design." },
+        { "chunk": "ac-preventive#Annual servicing", "grade": 0, "kind": "strong", "rationale": "Air conditioning maintenance, no help for a current problem." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Two documents cover the same topic; only one holds the procedure."
+    },
+    {
+      "caseId": "strong_distractor_heater_01",
+      "category": "D_strong_distractor",
+      "signal": { "type": "maintenance", "title": "Water heater not working", "description": "No hot water in the unit since this morning." },
+      "labels": [
+        { "chunk": "plumbing-leaks#Hot water not available", "grade": 3, "rationale": "Heater switch, breaker and alternative unit rule." },
+        { "chunk": "plumbing-leaks#Low water pressure", "grade": 0, "kind": "strong", "rationale": "Same document and same fixtures, wrong problem." },
+        { "chunk": "plumbing-leaks#Active water leak", "grade": 0, "kind": "strong", "rationale": "Same document, wrong problem." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Three sibling sections share vocabulary."
+    },
+    {
+      "caseId": "strong_distractor_cleaning_01",
+      "category": "D_strong_distractor",
+      "signal": { "type": "housekeeping", "title": "Housekeeping has not cleaned the room", "description": "The room was supposed to be cleaned at 10 am and it is now 1 pm." },
+      "labels": [
+        { "chunk": "housekeeping#Delayed room cleaning", "grade": 3, "rationale": "Two-hour delay rule and supervisor action." },
+        { "chunk": "housekeeping#Linen change frequency", "grade": 0, "kind": "strong", "rationale": "Housekeeping content, not about a missed cleaning." },
+        { "chunk": "housekeeping#Extra towels and amenities", "grade": 0, "kind": "strong", "rationale": "Housekeeping content, not about a missed cleaning." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Same document, different section."
+    },
+    {
+      "caseId": "near_topic_parking_01",
+      "category": "E_near_topic_distractor",
+      "signal": { "type": "guest_request", "title": "Guest asks about parking for a second car", "description": "The guest arrived with two vehicles and wants to park both." },
+      "labels": [
+        { "chunk": "parking#Parking allocation", "grade": 3, "rationale": "One bay per unit, charge for additional vehicles." },
+        { "chunk": "parking#Airport transfer bookings", "grade": 0, "kind": "near-topic", "rationale": "Same document about transport, unrelated to parking a second car." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Neighbouring section of the same document."
+    },
+    {
+      "caseId": "near_topic_deposit_01",
+      "category": "E_near_topic_distractor",
+      "signal": { "type": "payment", "title": "Guest wants the security deposit back", "description": "The guest checked out yesterday and asks when the deposit will be returned." },
+      "labels": [
+        { "chunk": "payments#Deposit handling", "grade": 3, "rationale": "Release of the deposit within three days after check-out." },
+        { "chunk": "payments#Refund processing", "grade": 1, "rationale": "Refund timing for approved refunds; related money movement, but not deposits." },
+        { "chunk": "payments#Payment dispute", "grade": 0, "kind": "near-topic", "rationale": "Payments topic, but about disputed charges." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Money-related sections that are only partly applicable."
+    },
+    {
+      "caseId": "keyword_smoke_01",
+      "category": "F_exact_keyword_distractor",
+      "signal": { "type": "maintenance", "title": "Smoke detector beeping in unit 112", "description": "The smoke detector in the hallway chirps every minute and shows an amber light." },
+      "labels": [
+        { "chunk": "safety#Smoke detector fault", "grade": 3, "rationale": "Chirping detector with a fault light: replace the same day." },
+        { "chunk": "safety#Fire alarm activation", "grade": 0, "kind": "exact-keyword", "rationale": "Shares alarm and fire-safety vocabulary but is the evacuation procedure, which is wrong here." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "A wrong evacuation instruction would be actively harmful."
+    },
+    {
+      "caseId": "keyword_latecheckout_01",
+      "category": "F_exact_keyword_distractor",
+      "signal": { "type": "guest_request", "title": "Guest wants to leave late because of an evening flight", "description": "The guest has a late flight and asks to keep the room until 5 pm." },
+      "labels": [
+        { "chunk": "checkin-out#Late checkout requests", "grade": 3, "rationale": "Approval rule and pricing for late checkout." },
+        { "chunk": "checkin-out#Early check-in requests", "grade": 0, "kind": "exact-keyword", "rationale": "Shares check-in/check-out and timing vocabulary, opposite situation." },
+        { "chunk": "parking#Airport transfer bookings", "grade": 0, "kind": "exact-keyword", "rationale": "Shares the flight vocabulary, unrelated to room timing." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "'flight' pulls toward the transfer section."
+    },
+    {
+      "caseId": "none_museum_01",
+      "category": "G_no_relevant_knowledge",
+      "signal": { "type": "other", "title": "Request for a museum recommendation", "description": "The guest asks which museums are worth visiting in the city." },
+      "labels": [],
+      "expectedNoRelevantKnowledge": true,
+      "notes": "The corpus contains no visitor-information guidance."
+    },
+    {
+      "caseId": "none_compliment_01",
+      "category": "G_no_relevant_knowledge",
+      "signal": { "type": "sentiment", "title": "Guest left a very positive comment about the view", "description": "The review says the sea view from the balcony was the highlight of the stay." },
+      "labels": [],
+      "expectedNoRelevantKnowledge": true,
+      "notes": "Praise needs no procedure; nothing in the corpus applies."
+    },
+    {
+      "caseId": "none_backup_01",
+      "category": "G_no_relevant_knowledge",
+      "signal": { "type": "system", "title": "Nightly backup job completed", "description": "The property management system backup finished with no errors." },
+      "labels": [],
+      "expectedNoRelevantKnowledge": true,
+      "notes": "An informational system signal with no matching knowledge."
+    },
+    {
+      "caseId": "multi_ac_01",
+      "category": "H_multiple_relevant",
+      "signal": { "type": "maintenance", "title": "Air conditioning leaking and not cooling", "description": "The air conditioner is not cooling and is also dripping water on the floor." },
+      "labels": [
+        { "chunk": "ac-troubleshooting#Cooling failure first checks", "grade": 3, "rationale": "Covers the cooling failure half of the signal." },
+        { "chunk": "ac-troubleshooting#Noisy or leaking air conditioner", "grade": 3, "rationale": "Covers the dripping half of the signal." },
+        { "chunk": "ac-preventive#Annual servicing", "grade": 0, "kind": "near-topic", "rationale": "Scheduled servicing only." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Both sections are needed; Recall@K must consider the full relevant set."
+    },
+    {
+      "caseId": "multi_pest_01",
+      "category": "H_multiple_relevant",
+      "signal": { "type": "complaint", "title": "Cockroach seen in the kitchen", "description": "The guest saw a cockroach near the sink and is upset." },
+      "labels": [
+        { "chunk": "pest#Pest sighting", "grade": 3, "rationale": "Apologise, move the guest, isolate the unit, book the contractor." },
+        { "chunk": "pest#Routine pest prevention", "grade": 2, "rationale": "Monthly kitchen treatment is useful context for the operator." },
+        { "chunk": "lost-found#Lost property report", "grade": 0, "kind": "near-topic", "rationale": "Guest-report handling, unrelated subject." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "One decisive chunk and one useful supporting chunk."
+    },
+    {
+      "caseId": "boundary_odour_01",
+      "category": "I_boundary_ambiguous",
+      "signal": { "type": "complaint", "title": "Guest unhappy about a bad smell in the bathroom", "description": "The guest says the bathroom smells unpleasant." },
+      "labels": [
+        { "chunk": "plumbing-leaks#Active water leak", "grade": 1, "rationale": "A smell can come from a drain or leak, but nothing states this; related, not applicable." },
+        { "chunk": "pest#Pest sighting", "grade": 1, "rationale": "A smell can indicate pests; again only related." }
+      ],
+      "expectedNoRelevantKnowledge": true,
+      "notes": "JUDGMENT: no section addresses odours, so the annotation is 'no relevant knowledge'. Both grade-1 chunks are plausible follow-ups but insufficient. A retriever that returns them is not clearly wrong; one that returns them as confident answers is over-reaching."
+    },
+    {
+      "caseId": "boundary_lock_01",
+      "category": "I_boundary_ambiguous",
+      "signal": { "type": "guest_request", "title": "Door does not open and the lock light blinks", "description": "The door does not open with the key card and the lock light blinks once." },
+      "labels": [
+        { "chunk": "access-keys#Key card not working", "grade": 2, "rationale": "JUDGMENT: applicable if the card is at fault, but the blinking lock may indicate a hardware fault that this section does not cover; useful, not decisive." },
+        { "chunk": "access-keys#Lost key card", "grade": 0, "kind": "near-topic", "rationale": "The card is not lost." }
+      ],
+      "expectedNoRelevantKnowledge": false,
+      "notes": "Relevance is ambiguous by design; graded 2 rather than 3."
+    }
+  ],
+  "securityCases": [
+    {
+      "caseId": "security_foreign_workspace_01",
+      "type": "foreign_workspace",
+      "signal": { "type": "maintenance", "title": "Air conditioner not cooling in unit 204", "description": "Guest reports warm air from the air conditioner and the room is uncomfortable." },
+      "forbiddenChunks": ["foreign-ac#Cooling failure first checks"],
+      "notes": "Another workspace's document is near-identical to the applicable procedure. It must never be eligible, whatever its similarity."
+    },
+    {
+      "caseId": "security_restricted_visibility_01",
+      "type": "restricted_visibility",
+      "signal": { "type": "maintenance", "title": "Air conditioner not cooling in unit 204", "description": "Guest reports warm air from the air conditioner and the room is uncomfortable." },
+      "forbiddenChunks": ["escalation-restricted#Cooling failure escalation"],
+      "notes": "A restricted chunk about cooling failures must not reach a staff-ceiling caller."
+    },
+    {
+      "caseId": "security_forged_workspace_selector_01",
+      "type": "forged_workspace_selector",
+      "signal": { "type": "maintenance", "title": "Air conditioner not cooling in unit 204", "description": "Guest reports warm air from the air conditioner and the room is uncomfortable." },
+      "forbiddenChunks": ["foreign-ac#Cooling failure first checks"],
+      "notes": "A caller of the evaluation workspace names the foreign workspace as the selector; it must be refused and reach nothing."
+    },
+    {
+      "caseId": "security_forged_visibility_selector_01",
+      "type": "forged_visibility_selector",
+      "signal": { "type": "maintenance", "title": "Air conditioner not cooling in unit 204", "description": "Guest reports warm air from the air conditioner and the room is uncomfortable." },
+      "forbiddenChunks": ["escalation-restricted#Cooling failure escalation"],
+      "notes": "A staff-ceiling caller supplies level/visibility selectors through query, header and body; they must be ignored."
+    }
+  ]
+}

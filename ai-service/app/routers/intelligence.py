@@ -24,6 +24,7 @@ from fastapi import APIRouter
 from app.config import settings
 from app.exceptions import ProviderNotConfiguredError
 from app.models.intelligence import IntelligenceRequest, IntelligenceResponse
+from app.models.visibility import is_visible
 from app.services.deterministic_stub import generate_deterministic_intelligence
 from app.services.gemini_client import generate_gemini_intelligence
 
@@ -34,10 +35,15 @@ router = APIRouter()
 def post_intelligence_signal(payload: IntelligenceRequest) -> IntelligenceResponse:
     provider = settings.llm_provider.strip().lower()
 
+    # Defence in depth: Node has already removed knowledge above the caller's
+    # level. Anything still above it is dropped here, before any prompt is
+    # built, so it can never reach a provider or appear in provenance.
+    knowledge = [item for item in payload.knowledge if is_visible(item.visibility, payload.authorizedLevel)]
+
     if provider == "test":
-        return generate_deterministic_intelligence(payload.context, payload.knowledge)
+        return generate_deterministic_intelligence(payload.context, knowledge)
 
     if provider == "gemini":
-        return generate_gemini_intelligence(payload.context, payload.knowledge)
+        return generate_gemini_intelligence(payload.context, knowledge)
 
     raise ProviderNotConfiguredError()

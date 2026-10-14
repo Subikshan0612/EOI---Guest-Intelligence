@@ -1,0 +1,282 @@
+/*
+ * Sign-in lifecycle UI (Phase 45B.2). Built on the existing tokens and primitives (.koi-card, .page-title, .primary-button).
+ */
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-24) var(--space-16);
+  background: var(--color-bg);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 28rem;
+  display: grid;
+  gap: var(--space-12);
+  justify-items: start;
+}
+
+/* The heading takes programmatic focus so a screen reader announces the screen; it is not interactive, so it shows no focus ring. */
+.auth-card .page-title:focus,
+.auth-card .page-title:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.auth-card .page-lead {
+  margin: 0;
+}
+
+.auth-brand {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
+  color: var(--color-text);
+}
+
+.session-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+  margin: 0 0 var(--space-16);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+  color: var(--color-text);
+}
+
+.session-notice-text {
+  margin: 0;
+  flex: 1 1 14rem;
+}
+
+.session-notice-dev {
+  flex: 1 0 100%;
+  margin: 0;
+}
+
+.signout-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 2.5rem;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.signout-button:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.signout-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .signout-button span {
+    display: none;
+  }
+  .signout-button {
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    justify-content: center;
+    padding: 0 var(--space-8);
+  }
+}
+
+.auth-note {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+/* Development builds only: explains why the plain dev profile has no Sign in / Sign out (see DevProfileNotice). */
+.dev-profile-notice {
+  margin: 0 0 var(--space-16);
+  padding: var(--space-8) var(--space-12);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-soft);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.dev-profile-notice code {
+  font-size: 0.92em;
+}
+
+/* Account setup (Phase 45C): the one-field onboarding form and the sign-in / create-account switch. */
+.auth-form {
+  display: grid;
+  gap: var(--space-8);
+  width: 100%;
+  justify-items: start;
+}
+
+.auth-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.auth-input {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.auth-input:focus {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.auth-input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.auth-switch {
+  font-size: var(--font-size-sm);
+}
+
+.auth-switch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-md);
+}
+
+/* A standalone secondary action (e.g. Sign out on the setup screen) keeps a comfortable touch target. */
+.auth-card > .auth-switch {
+  min-height: 2.5rem;
+}
+
+/* Unified sign-in pages (Phase 46): email + password forms, the "or" divider and the Google button. */
+.auth-field {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+}
+
+.auth-field-row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: stretch;
+}
+
+.auth-field-row .auth-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.auth-reveal {
+  flex: 0 0 auto;
+  min-width: 3.5rem;
+  min-height: 2.5rem;
+  padding: 0 var(--space-12);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.auth-reveal:hover {
+  color: var(--color-text);
+}
+
+.auth-reveal:focus-visible,
+.auth-link:focus-visible,
+.secondary-button:focus-visible,
+.auth-button-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.auth-form .primary-button,
+.auth-card > .primary-button,
+.auth-google {
+  width: 100%;
+  min-height: 2.75rem;
+  justify-content: center;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-16);
+  min-height: 2.5rem;
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.secondary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.auth-link {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  border-radius: var(--radius-md);
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+.auth-button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  width: 100%;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}

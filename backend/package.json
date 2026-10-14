@@ -6,19 +6,22 @@
   "description": "KOI API - Kolam Operational Intelligence backend",
   "scripts": {
     "dev": "nodemon server.js",
+    "dev:google": "node scripts/start-google-dev.mjs",
     "start": "node server.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.17.0 <21"
   },
   "dependencies": {
     "cors": "^2.8.6",
     "csv-parse": "^7.0.2",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "jose": "^6.2.12",
     "mammoth": "^1.12.3",
     "mongoose": "^8.24.4",
     "multer": "^2.4.0",
+    "nodemailer": "^10.0.15",
     "openai": "^6.49.0",
     "pdf-parse": "^2.4.5"
   },

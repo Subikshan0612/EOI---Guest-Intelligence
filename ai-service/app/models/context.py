@@ -124,6 +124,19 @@ class SignalHistory(BaseModel):
     signals: list[HistorySignal] = Field(default_factory=list)
 
 
+class ReportCheck(BaseModel):
+    """Phase 52: a conflict the SERVER found between the operator's own words and a current
+    operational record (for example the day the guest says they leave versus the stay's
+    recorded check-out date). Derived deterministically by Node, never by a model. The
+    record is the authoritative fact; this only tells the analysis that the two differ."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    reported: str
+    recorded: str
+
+
 class SignalContext(BaseModel):
     """The full context object — identical in shape to what
     `GET /api/signals/:id/context` already returns to the frontend today.
@@ -138,3 +151,4 @@ class SignalContext(BaseModel):
     property: Optional[PropertyFact] = None
     unit: Optional[UnitFact] = None
     history: SignalHistory
+    reportChecks: list[ReportCheck] = Field(default_factory=list)

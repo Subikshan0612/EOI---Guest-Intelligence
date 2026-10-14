@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { env } from "./env.js";
+import { assertMongoUriAllowed } from "./mongoSafety.js";
 
 const READY_STATE = {
   0: "disconnected",
@@ -27,6 +28,10 @@ export async function connectDatabase() {
   if (!env.mongodbUri) {
     throw new Error("Missing required environment variable: MONGODB_URI");
   }
+
+  // Database-safety guard (mongoSafety.js): a test / validation / local-only process is refused here, before anything is opened, unless EVERY host of the URI is loopback.
+  // The same check also sits under mongoose.connect(), mongoose.createConnection() and MongoClient, so this early call only gives the clearest message.
+  assertMongoUriAllowed(env.mongodbUri);
 
   attachConnectionListeners();
 

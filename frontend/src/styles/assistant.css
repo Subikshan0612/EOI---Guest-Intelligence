@@ -1,0 +1,513 @@
+/*
+ * Operational Assistant (Phase 47). Built only on the existing tokens and primitives (.page, .koi-card, .primary-button, .text-button, .status-chip, .muted,
+ * .intel-section-label). Namespaced .asst-*: nothing here restyles another page.
+ */
+
+/* ---- the operational loop ------------------------------------------------------------------------------------------- */
+.asst-flow {
+  margin: var(--space-16) 0 var(--space-24);
+  overflow-x: auto;
+}
+
+.asst-flow ol {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: max-content;
+}
+
+.asst-flow li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.asst-flow-label {
+  display: inline-flex;
+  flex-direction: column;
+  padding: var(--space-4) var(--space-12);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  background: var(--color-elevated);
+  color: var(--color-text);
+}
+
+.asst-flow li[data-live="false"] .asst-flow-label {
+  border-style: dashed;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-regular);
+}
+
+.asst-flow-state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.asst-flow-arrow {
+  color: var(--color-text-muted);
+}
+
+/* ---- layout --------------------------------------------------------------------------------------------------------- */
+.asst-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-24);
+}
+
+@media (min-width: 64rem) {
+  .asst-layout {
+    grid-template-columns: minmax(0, 1fr) 15rem;
+    align-items: start;
+  }
+}
+
+.asst-main {
+  min-width: 0;
+}
+
+.asst-side {
+  min-width: 0;
+}
+
+.asst-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.asst-new {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 2.75rem;
+}
+
+.asst-recent {
+  margin: var(--space-8) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.asst-recent-link {
+  display: block;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-height: 2.5rem;
+  box-sizing: border-box;
+}
+
+.asst-recent-link:hover,
+.asst-recent-link.active {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+/* ---- the thread ------------------------------------------------------------------------------------------------------ */
+.asst-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-20);
+  margin: 0 0 var(--space-20);
+  padding: 0;
+  list-style: none;
+}
+
+.asst-message {
+  max-width: 44rem;
+  min-width: 0;
+}
+
+.asst-message[data-role="user"] {
+  align-self: flex-end;
+  width: min(100%, 36rem);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-lg);
+  background: var(--color-accent-soft);
+}
+
+.asst-speaker {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.asst-text {
+  margin: 0;
+  line-height: var(--line-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.asst-empty {
+  padding: var(--space-16) 0;
+}
+
+.asst-end {
+  height: 1px;
+  list-style: none;
+}
+
+/* ---- the case: signal -> context -> intelligence -------------------------------------------------------------------- */
+.asst-case {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  margin-top: var(--space-12);
+}
+
+.asst-stage {
+  margin: 0;
+  padding-left: var(--space-16);
+  border-left: 3px solid var(--color-border-strong);
+}
+
+.koi-card.asst-stage + .koi-card.asst-stage {
+  margin-top: 0;
+}
+
+.asst-intel {
+  border-left-color: var(--color-accent);
+}
+
+.asst-signal-title {
+  margin: var(--space-4) 0 var(--space-8);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.asst-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0 0 var(--space-8);
+}
+
+.asst-sub {
+  margin: var(--space-12) 0 var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.asst-note {
+  margin: var(--space-4) 0;
+  font-size: var(--font-size-sm);
+}
+
+.asst-checklist,
+.asst-bullets {
+  margin: var(--space-4) 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.asst-checklist li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.asst-checklist li[data-present="true"] svg {
+  color: var(--color-success);
+}
+
+.asst-checklist li[data-present="false"] svg {
+  color: var(--color-text-muted);
+}
+
+.asst-bullets li {
+  padding-left: var(--space-16);
+  position: relative;
+}
+
+.asst-bullets li::before {
+  content: "•";
+  position: absolute;
+  left: var(--space-4);
+}
+
+.asst-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem; /* a comfortable touch target for a plain text link */
+  margin-top: var(--space-4);
+}
+
+/* Workstream 5B: an analysis that is still being prepared - quiet, one thin accent rule, no animation, no progress bar. */
+.asst-working {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-left: var(--space-12);
+  border-left: 2px solid var(--color-accent);
+}
+
+.asst-working-title {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.asst-hazard-note {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.asst-generate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+.asst-generate .primary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 2.75rem;
+}
+
+/* ---- the composer --------------------------------------------------------------------------------------------------- */
+.asst-composer {
+  position: sticky;
+  bottom: 0;
+  padding: var(--space-12) 0 var(--space-8);
+  background: linear-gradient(to top, var(--color-bg) 85%, transparent);
+}
+
+.asst-composer-label {
+  display: block;
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.asst-composer-row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: stretch;
+}
+
+.asst-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-12);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+  color: var(--color-text);
+  font: inherit;
+  line-height: var(--line-snug);
+  resize: vertical;
+}
+
+.asst-input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-color: var(--color-accent);
+}
+
+.asst-input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.asst-send {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  align-self: flex-end;
+  min-height: 2.75rem;
+}
+
+#asst-input-error:empty {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  .asst-composer-row {
+    flex-direction: column;
+  }
+
+  .asst-send {
+    align-self: stretch;
+    justify-content: center;
+  }
+
+  .asst-message[data-role="user"] {
+    width: 100%;
+  }
+}
+
+/* ---- Phase 48: per-case progress and the Decision section ------------------------------------------------------------ */
+.asst-progress {
+  overflow-x: auto;
+}
+
+.asst-progress ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asst-progress li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.asst-progress li[data-state="done"],
+.asst-progress li[data-state="review"],
+.asst-progress li[data-state="working"] {
+  color: var(--color-text);
+}
+
+.asst-progress li[data-state="done"] .asst-progress-mark {
+  color: var(--color-success);
+}
+
+.asst-progress li[data-state="review"] .asst-progress-mark {
+  color: var(--color-warning);
+}
+
+.asst-progress li[data-state="working"] .asst-progress-mark {
+  color: var(--color-accent);
+}
+
+.asst-progress-label {
+  font-weight: var(--font-weight-semibold);
+}
+
+.asst-progress-state {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.asst-decision,
+.asst-action-stage,
+.asst-outcome-stage {
+  border-left-color: var(--color-accent-gold);
+}
+
+.asst-quote {
+  margin: var(--space-4) 0 var(--space-8);
+  padding-left: var(--space-12);
+  border-left: 2px solid var(--color-border-strong);
+}
+
+.asst-human {
+  margin-top: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-soft);
+}
+
+.asst-human[data-outcome="rejected"] {
+  background: var(--color-warning-soft);
+}
+
+.asst-outcome {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin: var(--space-4) 0;
+}
+
+.asst-safety-note {
+  display: flex;
+  gap: var(--space-8);
+  align-items: flex-start;
+  margin: var(--space-8) 0;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-snug);
+}
+
+.asst-safety-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-danger);
+}
+
+.asst-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+  margin-top: var(--space-8);
+}
+
+.asst-actions .primary-button,
+.asst-actions .text-button {
+  min-height: 2.75rem;
+}
+
+.asst-confirm,
+.asst-reject-form {
+  margin-top: var(--space-8);
+  padding: var(--space-12);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+}
+
+.asst-field-label {
+  display: block;
+  margin: var(--space-8) 0 var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.asst-reject-form .asst-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Safety/context hardening: a record-based repeat note (server-derived; quiet, one thin accent rule) and the refusal restriction line under the safety assessment. */
+.asst-recurrence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-left: var(--space-12);
+  border-left: 2px solid var(--color-accent);
+  margin-top: var(--space-8);
+}
+
+.safety-refusal-note {
+  margin-top: var(--space-4);
+}

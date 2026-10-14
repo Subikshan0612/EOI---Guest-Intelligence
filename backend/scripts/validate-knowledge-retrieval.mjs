@@ -16,6 +16,7 @@
  * guarantees through the real Node candidate-selection + Node<->Python +
  * Node re-verification pipeline.
  */
+import "./lib/authFetch.mjs";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
 import {
   Workspace,
@@ -217,7 +218,8 @@ async function main() {
   if (topKResults.every((r) => Array.isArray(r.sectionPath))) ok("7G.6b: every retrieval result exposes sectionPath as an array");
   else fail("7G.6b: every retrieval result exposes sectionPath as an array", JSON.stringify(topKResults.map((r) => r.sectionPath)));
 
-  // === 7: candidate cap = 200 (bulk-inserted directly for speed) ===
+  // === 7: paging over more than one Python request's worth of candidates (bulk-inserted directly for speed) ===
+  // Phase 25: the eligible set is scored in pages of 200 (no silent truncation to the first 200 by _id).
   await connectDatabase();
   const capWs = trackCreated(await expectStatus("6G.7: cap-test workspace create", "POST", "/workspaces", { name: `Phase6G Cap WS ${stamp}`, slug: `phase6g-cap-ws-${stamp}` }, 201), "workspaceIds");
   const capDoc = trackCreated(
@@ -229,14 +231,14 @@ async function main() {
     const vector = new Array(32).fill(0).map((_, idx) => Math.sin(i * 31 + idx));
     capChunks.push({
       documentId: capDoc, version: 1, workspaceId: capWs, status: "active",
-      chunkIndex: i, section: "", text: `placeholder chunk ${i}`, embedding: vector, embeddingModel: "synthetic-test",
+      chunkIndex: i, section: "", text: `placeholder chunk ${i}`, embedding: vector, embeddingModel: "deterministic-embedding-v1",
     });
   }
   await KnowledgeChunk.insertMany(capChunks);
   const capSignal = await createSignal({ workspaceId: capWs, type: "maintenance", title: "AC not cooling", description: "Warm air." });
-  const capRes = await expectStatus("6G.7: retrieval succeeds despite 250 eligible chunks (cap applied)", "GET", `/signals/${capSignal}/knowledge-retrieval?workspaceId=${capWs}`, null, 200);
-  if ((capRes.json?.data?.results || []).length <= 5) ok("6G.7: candidate cap prevented an oversized Python request from failing");
-  else fail("6G.7: candidate cap prevented an oversized Python request from failing");
+  const capRes = await expectStatus("6G.7: retrieval succeeds with 250 eligible chunks (scored in two pages)", "GET", `/signals/${capSignal}/knowledge-retrieval?workspaceId=${capWs}`, null, 200);
+  if ((capRes.json?.data?.results || []).length <= 5) ok("6G.7: an oversized eligible set does not fail the Python request (paged)");
+  else fail("6G.7: an oversized eligible set does not fail the Python request (paged)");
 
   // === 8: deterministic tie-breaking ===
   const tie1 = await retrieve(signalFull, wsA);

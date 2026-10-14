@@ -119,6 +119,8 @@ export function mapSignalFromApi(doc) {
     detectedAt: doc.detectedAt ?? null,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
+    // Workstream 5B: true ONLY when the server's own safety policy classified this report as a life-safety hazard (the structured, server-derived issue; never inferred from text here).
+    serverHazard: doc.issue?.source === "SERVER_DERIVED" && doc.issue?.problemFamily === "safety_hazard",
   };
 }
 

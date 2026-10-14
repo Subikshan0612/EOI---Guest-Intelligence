@@ -1,9 +1,12 @@
+import mongoose from "mongoose";
 import { Conversation } from "../models/Conversation.js";
+import { Message } from "../models/Message.js";
 import { Guest } from "../models/Guest.js";
 import { Signal } from "../models/Signal.js";
 import { Stay } from "../models/Stay.js";
 import { Workspace } from "../models/Workspace.js";
 import { AppError } from "../utils/AppError.js";
+import { requireBoundedString } from "../utils/boundedJson.js";
 import { parseObjectId, requireObjectId } from "../utils/objectId.js";
 import { parsePagination, parseSort } from "../utils/pagination.js";
 import {
@@ -19,6 +22,32 @@ import {
 } from "./queryHelpers.js";
 
 const UPDATABLE = ["userId", "guestId", "stayId", "signalIds", "title", "status"];
+
+// Field bounds (the UI's rename box allows 120 characters and generated titles are ~45; real titles are <= 19).
+export const CONVERSATION_LIMITS = Object.freeze({ titleMax: 200, userIdMax: 200, signalIdsMax: 100 });
+
+/**
+ * `userId` is legacy, NON-AUTHORITATIVE metadata (never compared to the token, never an ownership check). It is only
+ * shape-checked here: absent, null, or a bounded string.
+ */
+function checkedUserId(value) {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "string") throw new AppError("userId must be a string", 400, { code: "INVALID_FIELD", field: "userId" });
+  if (value.length > CONVERSATION_LIMITS.userIdMax) throw new AppError(`userId must be at most ${CONVERSATION_LIMITS.userIdMax} characters`, 400, { code: "INVALID_FIELD", field: "userId" });
+  return value;
+}
+
+function checkedTitle(value) {
+  if (value === undefined) return undefined;
+  return requireBoundedString(value, { max: CONVERSATION_LIMITS.titleMax, label: "title" });
+}
+
+function checkedSignalIds(value) {
+  if (Array.isArray(value) && value.length > CONVERSATION_LIMITS.signalIdsMax) {
+    throw new AppError(`signalIds must contain at most ${CONVERSATION_LIMITS.signalIdsMax} items`, 400, { code: "INVALID_FIELD", field: "signalIds" });
+  }
+  return value;
+}
 
 async function validateConversationRefs(workspaceId, { guestId, stayId, signalIds }) {
   if (guestId) {
@@ -36,8 +65,9 @@ async function validateConversationRefs(workspaceId, { guestId, stayId, signalId
     if (signals.length !== signalIds.length) {
       throw new AppError("One or more signals were not found", 404);
     }
-    for (const signal of signals) {
-      assertSameWorkspace(signal, workspaceId, "Signal");
+    // A Signal of another workspace gets the SAME response as a missing one (Phase 21).
+    if (signals.some((signal) => String(signal.workspaceId) !== String(workspaceId))) {
+      throw new AppError("One or more signals were not found", 404);
     }
   }
 }
@@ -49,19 +79,21 @@ export async function createConversation(body) {
 
   const guestId = parseObjectId(body.guestId, "guestId");
   const stayId = parseObjectId(body.stayId, "stayId");
-  const signalIds = Array.isArray(body.signalIds)
+  const signalIds = Array.isArray(checkedSignalIds(body.signalIds))
     ? body.signalIds.map((id, index) => requireObjectId(id, `signalIds[${index}]`))
     : [];
+  const title = checkedTitle(body.title);
+  const userId = checkedUserId(body.userId);
 
   await validateConversationRefs(workspaceId, { guestId, stayId, signalIds });
 
   const conversation = await Conversation.create({
     workspaceId,
-    userId: body.userId,
+    userId,
     guestId,
     stayId,
     signalIds,
-    title: body.title,
+    title,
     status: body.status,
   });
 
@@ -103,6 +135,9 @@ export async function updateConversation(id, body, workspaceId) {
     throw new AppError("No valid fields provided for update", 400);
   }
 
+  if (updates.title !== undefined) updates.title = checkedTitle(updates.title);
+  if (updates.userId !== undefined) updates.userId = checkedUserId(updates.userId);
+  checkedSignalIds(updates.signalIds);
   if (updates.guestId !== undefined) updates.guestId = parseObjectId(updates.guestId, "guestId");
   if (updates.stayId !== undefined) updates.stayId = parseObjectId(updates.stayId, "stayId");
   if (updates.signalIds !== undefined) {
@@ -122,6 +157,21 @@ export async function updateConversation(id, body, workspaceId) {
   return toPlain(conversation);
 }
 
+/** True when the connected MongoDB supports multi-document transactions (a replica set or sharded cluster). */
+function supportsTransactions() {
+  const type = mongoose.connection.getClient?.()?.topology?.description?.type;
+  return type === "ReplicaSetWithPrimary" || type === "Sharded";
+}
+
+/**
+ * Deletes a Conversation AND its Messages (Phase 20; previously the Messages were left orphaned).
+ *   1. the Conversation is resolved INSIDE the caller's workspace (404 otherwise: nothing is touched);
+ *   2. its Messages are deleted (only `conversationId = this conversation`);
+ *   3. the Conversation is deleted.
+ * With a replica set the two deletes run in ONE transaction. On a standalone MongoDB (the development setup) a
+ * transaction is not available, so the ORDER is the safeguard: Messages first, so a failure between the steps leaves an
+ * EMPTY conversation (still reachable and retryable) and never orphaned Messages. That window is documented, not atomic.
+ */
 export async function deleteConversation(id, workspaceId) {
   const scope = requireObjectId(workspaceId, "workspaceId");
   const conversation = await findInWorkspaceOr404(
@@ -130,6 +180,20 @@ export async function deleteConversation(id, workspaceId) {
     scope,
     "Conversation",
   );
-  await conversation.deleteOne();
+
+  if (supportsTransactions()) {
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await Message.deleteMany({ conversationId: conversation._id }, { session });
+        await Conversation.deleteOne({ _id: conversation._id, workspaceId: scope }, { session });
+      });
+    } finally {
+      await session.endSession();
+    }
+  } else {
+    await Message.deleteMany({ conversationId: conversation._id });
+    await Conversation.deleteOne({ _id: conversation._id, workspaceId: scope });
+  }
   return toPlain(conversation);
 }

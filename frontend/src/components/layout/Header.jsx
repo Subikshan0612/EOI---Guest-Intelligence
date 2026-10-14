@@ -1,18 +1,18 @@
-import { Menu, PanelRight } from "lucide-react";
+import { Menu } from "lucide-react";
 import { useLocation, useMatch } from "react-router-dom";
-import { useConversations } from "../../features/conversations/useConversations";
 import { useLayout } from "../../hooks/useLayout";
 import { workspace } from "../../data/mockData";
+import SignOutButton from "../auth/SignOutButton";
 import { IconButton } from "../ui/IconButton";
 
 const pageMeta = {
   "/": {
     kicker: "Workspace",
-    title: "Intelligence",
+    title: "Overview",
   },
-  "/chat": {
+  "/assistant": {
     kicker: "Workspace",
-    title: "New investigation",
+    title: "Assistant",
   },
   "/operations/properties": {
     kicker: "Operations",
@@ -20,54 +20,28 @@ const pageMeta = {
   },
   "/operations/guests": {
     kicker: "Operations",
-    title: "Guests",
-  },
-  "/operations/signals": {
-    kicker: "Operations",
-    title: "Signals",
-  },
-  "/prompts": {
-    kicker: "Intelligence",
-    title: "Prompt library",
-  },
-  "/learning": {
-    kicker: "Intelligence",
-    title: "Learning",
+    title: "Guests & stays",
   },
   "/settings": {
-    kicker: "Workspace",
+    kicker: "Account",
     title: "Settings",
   },
 };
 
 export default function Header() {
   const location = useLocation();
-  const { toggleSidebar, toggleContext, contextOpen, sidebarOpen } = useLayout();
-  const { getById, listStatus } = useConversations();
-  const chatMatch = useMatch("/chat/:conversationId");
-  const conversationId = chatMatch?.params.conversationId;
-  const conversation = conversationId ? getById(conversationId) : null;
+  const { toggleSidebar, sidebarOpen } = useLayout();
   const propertyDetailMatch = useMatch("/operations/properties/:propertyId");
   const guestDetailMatch = useMatch("/operations/guests/:guestId");
-  const signalDetailMatch = useMatch("/operations/signals/:signalId");
-  const signalIntelligenceMatch = useMatch("/operations/signals/:signalId/intelligence");
+  const assistantMatch = useMatch("/assistant/:conversationId");
 
-  const meta = conversation
-    ? { kicker: "Investigation", title: conversation.title }
-    : conversationId
-      ? {
-          kicker: "Investigation",
-          title: listStatus === "loading" ? "Loading…" : "Conversation not found",
-        }
-      : propertyDetailMatch
-        ? { kicker: "Operations", title: "Property" }
-        : guestDetailMatch
-          ? { kicker: "Operations", title: "Guest" }
-          : signalIntelligenceMatch
-            ? { kicker: "Operations", title: "Signal Intelligence" }
-            : signalDetailMatch
-              ? { kicker: "Operations", title: "Signal" }
-              : (pageMeta[location.pathname] ?? pageMeta["/"]);
+  const meta = propertyDetailMatch
+    ? { kicker: "Operations", title: "Property" }
+    : guestDetailMatch
+      ? { kicker: "Operations", title: "Guest" }
+      : assistantMatch
+        ? pageMeta["/assistant"]
+        : (pageMeta[location.pathname] ?? pageMeta["/"]);
 
   return (
     <header className="app-header">
@@ -92,15 +66,6 @@ export default function Header() {
         </div>
       </div>
       <div className="header-end">
-        <IconButton
-          className="context-toggle"
-          label={contextOpen ? "Hide stay context" : "Show stay context"}
-          aria-expanded={contextOpen}
-          aria-controls="context-panel"
-          onClick={toggleContext}
-        >
-          <PanelRight size={20} strokeWidth={1.75} aria-hidden="true" />
-        </IconButton>
         <span className="workspace-chip" title={workspace.name}>
           <span className="workspace-dot" aria-hidden="true" />
           <span>{workspace.name}</span>
@@ -112,6 +77,7 @@ export default function Header() {
         >
           {workspace.initials}
         </span>
+        <SignOutButton />
       </div>
     </header>
   );

@@ -1,3 +1,4 @@
+import "./lib/authFetch.mjs";
 /**
  * Phase 7F-A validation: Deterministic Recurring Signal Pattern Detection.
  *

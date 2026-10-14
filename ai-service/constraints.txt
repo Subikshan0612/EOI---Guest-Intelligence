@@ -1,0 +1,52 @@
+# Exact versions of every package in the AI-service environment that passed the full test suite (531 tests), Python 3.12.6.
+# Use it with the requirements file so a fresh install is the tested install:
+#   pip install -r requirements.txt -c constraints.txt          (production / Render)
+#   pip install -r requirements-dev.txt -c constraints.txt      (development and tests)
+# A constraints file never adds a package by itself; it only fixes the version of anything that gets installed.
+# Regenerate it only after the whole suite passes on the new set: create a clean venv, install requirements-dev.txt, run `python -m pytest`, then `pip freeze`.
+#
+# urllib3 is 2.8.0 (the first tested set had 2.7.0): 2.8.0 fixes three advisories (PYSEC-2026-4175, -4176, -4177) in the outbound HTTP client; the full suite was re-run on it (531 passed).
+# Known and NOT fixed here: starlette 0.41.3 is the version fastapi 0.115.6 requires; its advisories are listed in backend/docs/EOI_RELEASE_CANDIDATE_INVENTORY.md with the mitigation (the service must stay private).
+#
+# Platform-specific packages are marked. `colorama` is installed on Windows only. `uvloop` is installed by uvicorn[standard] on Linux/macOS only: it could NOT be
+# exercised by the Windows test run, so its version below was chosen by dependency resolution for Linux (cp312 manylinux wheel exists) and is verified on the first Linux staging start.
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.7.22
+cffi==2.1.1
+charset-normalizer==3.5.1
+click==8.5.0
+colorama==0.4.6 ; sys_platform == "win32"
+cryptography==50.0.1
+distro==1.9.0
+fastapi==0.115.6
+google-auth==2.58.0
+google-genai==2.23.0
+h11==0.16.0
+httpcore==1.0.9
+httptools==0.8.0
+httpx==0.28.1
+idna==3.19
+iniconfig==2.3.0
+packaging==26.3
+pluggy==1.6.0
+pyasn1==0.6.4
+pyasn1_modules==0.4.2
+pycparser==3.0
+pydantic==2.13.5
+pydantic-settings==2.7.1
+pydantic_core==2.46.5
+pytest==8.3.4
+python-dotenv==1.2.3
+PyYAML==6.0.3
+requests==2.34.2
+sniffio==1.3.1
+starlette==0.41.3
+tenacity==9.1.4
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+urllib3==2.8.0
+uvicorn==0.34.0
+uvloop==0.23.0 ; sys_platform != "win32" and platform_python_implementation != "PyPy"
+watchfiles==1.2.0
+websockets==16.1.1

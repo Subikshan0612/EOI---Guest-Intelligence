@@ -22,7 +22,7 @@ export const importOperationalData = asyncHandler(async (req, res) => {
   const statusMapping = parseJsonField(req.body.statusMapping, "statusMapping");
 
   const data = await importService.importOperationalCsv({
-    workspaceId: req.body.workspaceId,
+    workspaceId: req.actor.workspaceId,
     propertyId: req.body.propertyId,
     filename: req.file.originalname,
     buffer: req.file.buffer,
@@ -35,6 +35,6 @@ export const importOperationalData = asyncHandler(async (req, res) => {
 });
 
 export const getImportBatch = asyncHandler(async (req, res) => {
-  const data = await importService.getImportBatchById(req.params.id, req.query.workspaceId);
+  const data = await importService.getImportBatchById(req.params.id, req.actor.workspaceId);
   sendSuccess(res, data);
 });

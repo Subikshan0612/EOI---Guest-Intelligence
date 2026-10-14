@@ -13,6 +13,7 @@
  * the embedding boundary (Python is the only embedding caller, no MongoDB
  * in Python, no Gemini SDK in Node).
  */
+import "./lib/authFetch.mjs";
 import { readFileSync } from "node:fs";
 import { buildEmbeddingText, EMBEDDING_INPUT_VERSION } from "../src/services/knowledge/embeddingText.js";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
@@ -91,9 +92,10 @@ function trackCreated(result, bucket) {
   return id;
 }
 
-async function getChunks(documentId, workspaceId) {
-  const res = await request("GET", `/knowledge-documents/${documentId}/chunks?workspaceId=${workspaceId}&limit=200`);
-  return res.json?.data || [];
+// Phase 14: chunk HTTP responses no longer carry embedding vectors, so vectors are verified where they live (MongoDB).
+async function getChunks(documentId) {
+  await connectDatabase();
+  return KnowledgeChunk.find({ documentId }).select("+embedding").sort({ chunkIndex: 1 }).lean();
 }
 
 async function createDocument(body) {

@@ -26,6 +26,7 @@ from app.config import settings
 from app.exceptions import MalformedResponseError, ProviderError, ProviderNotConfiguredError
 from app.models.context import SignalContext
 from app.models.intelligence import IntelligenceResponse, KnowledgeItem, KnowledgeProvenanceItem, Provenance
+from app.provider_policy import APPROVED_PROVIDER, require_approved_gemini_model
 from app.services.prompt_builder import build_intelligence_prompt
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,9 @@ def _build_knowledge_provenance(
 def generate_gemini_intelligence(
     context: SignalContext, knowledge: list[KnowledgeItem] | None = None
 ) -> IntelligenceResponse:
+    # Phase 34A-B: the same approved-model gate as the analysis path, before any request. The legacy error mapping below
+    # is deliberately unchanged (this endpoint has no Node caller; the production path is gemini_analysis_client.py).
+    model = require_approved_gemini_model(settings.llm_model)
     if not settings.gemini_api_key:
         raise ProviderNotConfiguredError()
 
@@ -177,7 +181,7 @@ def generate_gemini_intelligence(
 
     try:
         response = client.models.generate_content(
-            model=settings.llm_model,
+            model=model,
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
@@ -215,7 +219,7 @@ def generate_gemini_intelligence(
             # Provenance is attached here, by the code that actually knows
             # which provider/model was called — never trusted from the
             # model's own JSON output.
-            provenance=Provenance(provider="gemini", model=settings.llm_model),
+            provenance=Provenance(provider=APPROVED_PROVIDER, model=model),
             # Built by intersecting the model's claim against what Node
             # actually supplied — never trusted from the model's raw output
             # directly (see _build_knowledge_provenance's docstring).

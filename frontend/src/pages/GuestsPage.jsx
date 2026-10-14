@@ -4,6 +4,7 @@ import { Plus, User } from "lucide-react";
 import GuestForm from "../features/operations/GuestForm";
 import { useGuests } from "../features/operations/useGuests";
 import { formatGuestName } from "../features/operations/operationsMapping";
+import RetryButton from "../components/auth/RetryButton";
 
 export default function GuestsPage() {
   const { guests, status, error, reload, createGuest } = useGuests();
@@ -14,10 +15,10 @@ export default function GuestsPage() {
       <article className="page">
         <section className="investigation-state">
           <p className="page-kicker">Operations</p>
-          <h1 className="page-title">Guests</h1>
+          <h1 className="page-title">Guests &amp; stays</h1>
           <p className="page-lead">
-            No development workspace is configured, so guests can’t be loaded or saved. Set{" "}
-            <code>VITE_KOI_WORKSPACE_ID</code> in <code>frontend/.env</code> to a real workspace id.
+            The guests in this workspace and their stays: who is in which room, and when they arrive and leave. The assistant uses
+            these records when it assesses a report about a room.
           </p>
         </section>
       </article>
@@ -64,9 +65,7 @@ export default function GuestsPage() {
       ) : status === "error" ? (
         <section className="investigation-state" role="alert">
           <p className="page-lead">{error || "Could not load guests."}</p>
-          <button type="button" className="text-button" onClick={reload}>
-            Try again
-          </button>
+          <RetryButton onClick={reload} />
         </section>
       ) : guests.length === 0 ? (
         <section className="investigation-state">

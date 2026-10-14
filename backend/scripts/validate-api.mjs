@@ -1,4 +1,6 @@
+import "./lib/authFetch.mjs";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
+import { cleanupAuthFixtures, decisionAuthHeaders } from "./lib/authFixtures.mjs";
 import {
   Workspace,
   Property,
@@ -46,7 +48,7 @@ function fail(name, detail = "") {
 async function request(method, path, body) {
   const response = await fetch(`${BASE}${path}`, {
     method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: await decisionAuthHeaders(method, path, body ? { "Content-Type": "application/json" } : undefined),
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -107,6 +109,7 @@ function assertListExcludes(name, result, forbiddenId) {
 
 async function cleanup() {
   await connectDatabase();
+  await cleanupAuthFixtures();
   await Promise.all([
     Outcome.deleteMany({ _id: { $in: created.outcomeIds } }),
     Action.deleteMany({ _id: { $in: created.actionIds } }),
@@ -567,27 +570,27 @@ async function main() {
   await expectStatusOneOf("F8: A cannot POST message into B conversation", "POST", `/conversations/${convB}/messages?workspaceId=${wsA}`, { role: "user", content: "leak" }, CROSS);
 
   // --- Cross-workspace references rejected on create ---
-  trackCreated(await expectStatus("G: stay A !ref guest B", "POST", "/stays", { workspaceId: wsA, guestId: guestB, propertyId }, 400), "stayIds");
-  trackCreated(await expectStatus("H: stay A !ref property B", "POST", "/stays", { workspaceId: wsA, guestId, propertyId: propB }, 400), "stayIds");
-  trackCreated(await expectStatus("I: stay A !ref unit B", "POST", "/stays", { workspaceId: wsA, guestId, propertyId, unitId: unitB }, 400), "stayIds");
+  trackCreated(await expectStatus("G: stay A !ref guest B", "POST", "/stays", { workspaceId: wsA, guestId: guestB, propertyId }, 404), "stayIds");
+  trackCreated(await expectStatus("H: stay A !ref property B", "POST", "/stays", { workspaceId: wsA, guestId, propertyId: propB }, 404), "stayIds");
+  trackCreated(await expectStatus("I: stay A !ref unit B", "POST", "/stays", { workspaceId: wsA, guestId, propertyId, unitId: unitB }, 404), "stayIds");
 
-  trackCreated(await expectStatus("J: signal A !ref guest B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", guestId: guestB }, 400), "signalIds");
-  trackCreated(await expectStatus("K: signal A !ref stay B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", stayId: stayB }, 400), "signalIds");
-  trackCreated(await expectStatus("L: signal A !ref property B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", propertyId: propB }, 400), "signalIds");
-  trackCreated(await expectStatus("M: signal A !ref unit B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", unitId: unitB }, 400), "signalIds");
+  trackCreated(await expectStatus("J: signal A !ref guest B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", guestId: guestB }, 404), "signalIds");
+  trackCreated(await expectStatus("K: signal A !ref stay B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", stayId: stayB }, 404), "signalIds");
+  trackCreated(await expectStatus("L: signal A !ref property B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", propertyId: propB }, 404), "signalIds");
+  trackCreated(await expectStatus("M: signal A !ref unit B", "POST", "/signals", { workspaceId: wsA, type: "maintenance", title: "x", unitId: unitB }, 404), "signalIds");
 
-  trackCreated(await expectStatus("N: conversation A !ref signal B", "POST", "/conversations", { workspaceId: wsA, signalIds: [signalB] }, 400), "conversationIds");
+  trackCreated(await expectStatus("N: conversation A !ref signal B", "POST", "/conversations", { workspaceId: wsA, signalIds: [signalB] }, 404), "conversationIds");
 
-  trackCreated(await expectStatus("O: intelligence A !ref conversation B", "POST", "/intelligence", { workspaceId: wsA, conversationId: convB }, 400), "intelligenceIds");
-  trackCreated(await expectStatus("P: intelligence A !ref signal B", "POST", "/intelligence", { workspaceId: wsA, signalIds: [signalB] }, 400), "intelligenceIds");
+  trackCreated(await expectStatus("O: intelligence A !ref conversation B", "POST", "/intelligence", { workspaceId: wsA, conversationId: convB }, 404), "intelligenceIds");
+  trackCreated(await expectStatus("P: intelligence A !ref signal B", "POST", "/intelligence", { workspaceId: wsA, signalIds: [signalB] }, 404), "intelligenceIds");
 
-  trackCreated(await expectStatus("Q: decision A !ref intelligence B", "POST", "/decisions", { workspaceId: wsA, intelligenceId: intelB, description: "x" }, 400), "decisionIds");
+  trackCreated(await expectStatus("Q: decision A !ref intelligence B", "POST", "/decisions", { workspaceId: wsA, intelligenceId: intelB, description: "x" }, 404), "decisionIds");
 
-  trackCreated(await expectStatus("R1: action A !ref intelligence B", "POST", "/actions", { workspaceId: wsA, intelligenceId: intelB, description: "x" }, 400), "actionIds");
-  trackCreated(await expectStatus("R2: action A !ref decision B", "POST", "/actions", { workspaceId: wsA, intelligenceId, decisionId: decisionB, description: "x" }, 400), "actionIds");
+  trackCreated(await expectStatus("R1: action A !ref intelligence B", "POST", "/actions", { workspaceId: wsA, intelligenceId: intelB, description: "x" }, 404), "actionIds");
+  trackCreated(await expectStatus("R2: action A !ref decision B", "POST", "/actions", { workspaceId: wsA, intelligenceId, decisionId: decisionB, description: "x" }, 404), "actionIds");
 
-  trackCreated(await expectStatus("S1: outcome A !ref intelligence B", "POST", "/outcomes", { workspaceId: wsA, intelligenceId: intelB }, 400), "outcomeIds");
-  trackCreated(await expectStatus("S2: outcome A !ref action B", "POST", "/outcomes", { workspaceId: wsA, intelligenceId, actionId: actionB }, 400), "outcomeIds");
+  trackCreated(await expectStatus("S1: outcome A !ref intelligence B", "POST", "/outcomes", { workspaceId: wsA, intelligenceId: intelB }, 404), "outcomeIds");
+  trackCreated(await expectStatus("S2: outcome A !ref action B", "POST", "/outcomes", { workspaceId: wsA, intelligenceId, actionId: actionB }, 404), "outcomeIds");
 
   // --- T: list endpoints never return another workspace's rows ---
   assertListExcludes("T: properties list scoped", await request("GET", `/properties?workspaceId=${wsA}&limit=100`), propB);

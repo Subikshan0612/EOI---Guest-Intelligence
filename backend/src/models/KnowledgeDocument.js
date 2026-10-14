@@ -29,6 +29,8 @@ const KNOWLEDGE_STATUSES = ["active", "superseded", "archived"];
 // document today, between its create and embed calls).
 const KNOWLEDGE_INGESTION_STATUSES = ["pending", "ready", "failed"];
 
+import { VISIBILITY_LEVELS } from "../services/knowledge/visibility.js";
+
 const knowledgeDocumentSchema = new mongoose.Schema(
   {
     workspaceId: {
@@ -122,6 +124,26 @@ const knowledgeDocumentSchema = new mongoose.Schema(
     // stack trace, or secret). Cleared back to undefined on a subsequent
     // successful embed.
     ingestionError: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
+    // Visibility given to any part of this document that is not classified
+    // individually (see services/knowledge/corpusClassification.js), and the
+    // minimum level a caller needs to read the document itself. "staff" by
+    // default - never guest unless someone says so.
+    defaultVisibility: {
+      type: String,
+      enum: VISIBILITY_LEVELS,
+      default: "staff",
+    },
+    // Explicit identity of a reviewed corpus profile (see
+    // services/knowledge/corpusProfiles.js) - e.g. "kolam-gandhi-v2". When
+    // set, chunking automatically applies that profile's section
+    // classification. Set only at creation (like `content`), validated
+    // against the registry, and never inferred from a filename or title.
+    // Absent = no classification: every chunk takes `defaultVisibility`.
+    corpusProfile: {
       type: String,
       trim: true,
       default: undefined,

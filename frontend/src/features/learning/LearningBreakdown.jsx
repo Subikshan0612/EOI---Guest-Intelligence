@@ -1,6 +1,7 @@
 import { formatStatusLabel } from "../operations/operationsMapping";
 import { formatShortDate } from "../../utils/formatDate";
 import { indexById, actionsWithoutDecision, outcomesWithoutAction, outcomesForAction } from "./learningMapping";
+import { presentText } from "../intelligence/presentation";
 
 /**
  * Layer C — Traceable Operational Breakdown (Phase 7E, Part 6).
@@ -41,7 +42,7 @@ function ActionEntry({ action, outcomes }) {
         <span className="status-chip" data-tone={action.status}>
           {formatStatusLabel(action.status)}
         </span>
-        <span className="learning-action-description">{action.description}</span>
+        <span className="learning-action-description">{presentText(action.description)}</span>
       </div>
       <p className="learning-action-meta">
         {action.assignedTo ? `Assigned to ${action.assignedTo}` : "Unassigned"}
@@ -81,7 +82,7 @@ function DecisionEntry({ decision, actionsById, outcomes }) {
             {decision.outcomeCount} outcome{decision.outcomeCount === 1 ? "" : "s"}
           </span>
         </span>
-        <span className="learning-decision-description">{decision.description}</span>
+        <span className="learning-decision-description">{presentText(decision.description)}</span>
       </summary>
 
       <div className="learning-decision-body">

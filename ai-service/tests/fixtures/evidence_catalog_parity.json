@@ -1,0 +1,297 @@
+{
+  "note": "Cross-language parity fixture for the Phase 34C evidence catalog. backend/scripts/validate-phase34c-evidence-guardrails.mjs (Node envelope) and ai-service/tests/test_evidence_envelope.py (Python mirror) must BOTH reproduce expectedCatalog exactly.",
+  "workspaceId": "64b0000000000000000000ff",
+  "input": {
+    "context": {
+      "signal": {
+        "id": "64b0000000000000000000a1",
+        "type": "maintenance",
+        "source": "staff",
+        "severity": "high",
+        "status": "new",
+        "title": "AC not cooling",
+        "description": "Warm air since last night.",
+        "occurredAt": "2026-01-01T00:00:00.000Z",
+        "detectedAt": "2026-01-01T00:00:00.000Z",
+        "propertyId": "64b0000000000000000000b1",
+        "unitId": "64b0000000000000000000c1",
+        "guestId": "64b0000000000000000000d1",
+        "stayId": "64b0000000000000000000e1"
+      },
+      "guest": {
+        "id": "64b0000000000000000000d1",
+        "available": true,
+        "recentStays": []
+      },
+      "stay": {
+        "id": "64b0000000000000000000e1",
+        "available": false
+      },
+      "property": {
+        "id": "64b0000000000000000000b1",
+        "available": true,
+        "name": "Kolam Residency",
+        "code": "KR01",
+        "timezone": "UTC",
+        "status": "active"
+      },
+      "unit": {
+        "id": "64b0000000000000000000c1",
+        "available": true,
+        "unitNumber": "204",
+        "type": "suite",
+        "status": "maintenance",
+        "propertyId": "64b0000000000000000000b1"
+      },
+      "history": {
+        "signals": [
+          {
+            "id": "64b0000000000000000000f1",
+            "type": "maintenance",
+            "severity": "low",
+            "status": "resolved",
+            "title": "Earlier AC noise",
+            "matchedBy": [
+              "unit"
+            ]
+          },
+          {
+            "id": "64b0000000000000000000f2",
+            "type": "maintenance",
+            "severity": "medium",
+            "status": "resolved",
+            "title": "Earlier filter",
+            "matchedBy": [
+              "unit"
+            ]
+          }
+        ]
+      }
+    },
+    "operationalHistory": {
+      "contractVersion": "operational-context-v1",
+      "intelligence": [
+        {
+          "kind": "prior_ai_analysis",
+          "signalId": "64b0000000000000000000f1",
+          "matchedBy": [
+            "unit"
+          ],
+          "recordedAt": "2026-01-02T00:00:00.000Z",
+          "situation": "Earlier AC noise.",
+          "recommendation": "Check the filter.",
+          "confidence": "low"
+        }
+      ],
+      "decisions": [
+        {
+          "kind": "human_reviewed_decision",
+          "signalId": "64b0000000000000000000f2",
+          "matchedBy": [
+            "unit"
+          ],
+          "status": "approved",
+          "priority": "low",
+          "description": "Replace the filter.",
+          "reviewedAt": "2026-01-03T00:00:00.000Z"
+        }
+      ]
+    },
+    "knowledge": [
+      {
+        "chunkId": "64b0000000000000000000k1",
+        "knowledgeDocumentId": "doc-64b0000000000000000000k1",
+        "version": 1,
+        "scope": "property",
+        "visibility": "staff",
+        "section": "HVAC SOP",
+        "sectionPath": [
+          "HVAC SOP"
+        ],
+        "chunkIndex": 0,
+        "text": "Check the air filter before dispatching a technician.",
+        "similarityScore": 0.8,
+        "retrievalScore": 0.8
+      },
+      {
+        "chunkId": "64b0000000000000000000k2",
+        "knowledgeDocumentId": "doc-64b0000000000000000000k2",
+        "version": 1,
+        "scope": "property",
+        "visibility": "staff",
+        "section": "HVAC SOP",
+        "sectionPath": [
+          "HVAC SOP"
+        ],
+        "chunkIndex": 0,
+        "text": "Check the air filter before dispatching a technician.",
+        "similarityScore": 0.8,
+        "retrievalScore": 0.8
+      }
+    ],
+    "learning": {
+      "learningVersion": "learning-v1",
+      "minimumSampleSize": 5,
+      "windowDays": 90,
+      "patterns": [
+        {
+          "actionType": "maintenance_dispatch",
+          "sampleSize": 10,
+          "successCount": 8,
+          "failedCount": 2,
+          "partialCount": 0,
+          "successRate": 0.8,
+          "eligible": true
+        },
+        {
+          "actionType": "guest_communication",
+          "sampleSize": 0,
+          "successCount": 0,
+          "failedCount": 0,
+          "partialCount": 0,
+          "successRate": null,
+          "eligible": false
+        },
+        {
+          "actionType": "escalation",
+          "sampleSize": 0,
+          "successCount": 0,
+          "failedCount": 0,
+          "partialCount": 0,
+          "successRate": null,
+          "eligible": false
+        },
+        {
+          "actionType": "inspection",
+          "sampleSize": 0,
+          "successCount": 0,
+          "failedCount": 0,
+          "partialCount": 0,
+          "successRate": null,
+          "eligible": false
+        },
+        {
+          "actionType": "other",
+          "sampleSize": 0,
+          "successCount": 0,
+          "failedCount": 0,
+          "partialCount": 0,
+          "successRate": null,
+          "eligible": false
+        }
+      ]
+    }
+  },
+  "expectedCatalogWithLearning": [
+    {
+      "ref": "current:signal:64b0000000000000000000a1",
+      "evidenceClass": "CURRENT_OPERATIONAL_FACT"
+    },
+    {
+      "ref": "current:property:64b0000000000000000000b1",
+      "evidenceClass": "CURRENT_OPERATIONAL_FACT"
+    },
+    {
+      "ref": "current:unit:64b0000000000000000000c1",
+      "evidenceClass": "CURRENT_OPERATIONAL_FACT"
+    },
+    {
+      "ref": "current:guest:64b0000000000000000000d1",
+      "evidenceClass": "CURRENT_OPERATIONAL_FACT"
+    },
+    {
+      "ref": "untrusted:signal:64b0000000000000000000a1",
+      "evidenceClass": "UNTRUSTED_SIGNAL"
+    },
+    {
+      "ref": "history:signal:64b0000000000000000000f1",
+      "evidenceClass": "OPERATIONAL_HISTORY"
+    },
+    {
+      "ref": "history:signal:64b0000000000000000000f2",
+      "evidenceClass": "OPERATIONAL_HISTORY"
+    },
+    {
+      "ref": "history:analysis:64b0000000000000000000f1",
+      "evidenceClass": "OPERATIONAL_HISTORY"
+    },
+    {
+      "ref": "history:decision:64b0000000000000000000f2",
+      "evidenceClass": "OPERATIONAL_HISTORY"
+    },
+    {
+      "ref": "knowledge:64b0000000000000000000k1",
+      "evidenceClass": "BUSINESS_KNOWLEDGE"
+    },
+    {
+      "ref": "knowledge:64b0000000000000000000k2",
+      "evidenceClass": "BUSINESS_KNOWLEDGE"
+    },
+    {
+      "ref": "learning:maintenance_dispatch",
+      "evidenceClass": "LEARNING_CONTEXT"
+    },
+    {
+      "ref": "learning:guest_communication",
+      "evidenceClass": "LEARNING_CONTEXT"
+    },
+    {
+      "ref": "learning:escalation",
+      "evidenceClass": "LEARNING_CONTEXT"
+    },
+    {
+      "ref": "learning:inspection",
+      "evidenceClass": "LEARNING_CONTEXT"
+    },
+    {
+      "ref": "learning:other",
+      "evidenceClass": "LEARNING_CONTEXT"
+    }
+  ],
+  "expectedCatalogWithoutLearning": [
+    {
+      "ref": "current:signal:64b0000000000000000000a1",
+      "evidenceClass": "CURRENT_OPERATIONAL_FACT"
+    },
+    {
+      "ref": "current:property:64b0000000000000000000b1",
+      "evidenceClass": "CURRENT_OPERATIONAL_FACT"
+    },
+    {
+      "ref": "current:unit:64b0000000000000000000c1",
+      "evidenceClass": "CURRENT_OPERATIONAL_FACT"
+    },
+    {
+      "ref": "current:guest:64b0000000000000000000d1",
+      "evidenceClass": "CURRENT_OPERATIONAL_FACT"
+    },
+    {
+      "ref": "untrusted:signal:64b0000000000000000000a1",
+      "evidenceClass": "UNTRUSTED_SIGNAL"
+    },
+    {
+      "ref": "history:signal:64b0000000000000000000f1",
+      "evidenceClass": "OPERATIONAL_HISTORY"
+    },
+    {
+      "ref": "history:signal:64b0000000000000000000f2",
+      "evidenceClass": "OPERATIONAL_HISTORY"
+    },
+    {
+      "ref": "history:analysis:64b0000000000000000000f1",
+      "evidenceClass": "OPERATIONAL_HISTORY"
+    },
+    {
+      "ref": "history:decision:64b0000000000000000000f2",
+      "evidenceClass": "OPERATIONAL_HISTORY"
+    },
+    {
+      "ref": "knowledge:64b0000000000000000000k1",
+      "evidenceClass": "BUSINESS_KNOWLEDGE"
+    },
+    {
+      "ref": "knowledge:64b0000000000000000000k2",
+      "evidenceClass": "BUSINESS_KNOWLEDGE"
+    }
+  ]
+}

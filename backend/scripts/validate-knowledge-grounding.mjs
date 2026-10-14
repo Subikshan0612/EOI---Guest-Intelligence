@@ -1,8 +1,8 @@
 /**
  * Phase 6H validation: knowledge-grounded intelligence generation.
  *
- * Drives the real, existing POST /api/signals/:id/intelligence endpoint
- * with LLM_PROVIDER=test-python — the same safe, deterministic way every
+ * Drives the real POST /api/intelligence/analyze/:signalId endpoint (the ONE generation path since Phase 24; the
+ * legacy POST /api/signals/:id/intelligence was retired) with LLM_PROVIDER=test-python — the same safe, deterministic way every
  * prior phase's Python-routed tests avoid real Gemini calls. The Python
  * side's own deterministic stub (ai-service/app/services/
  * deterministic_stub.py) honestly echoes back every KnowledgeItem it was
@@ -15,7 +15,10 @@
  *
  * Post-review correction: retrieval SUCCEEDING with zero results and
  * retrieval FAILING are two different states and must produce two
- * different outcomes (see intelligenceService.js's retrieveKnowledgeOrThrow).
+ * different outcomes (see ai/intelligenceService.js's retrieveKnowledgeOrThrow).
+ *
+ * Phase 24: the HTTP response is the sanitized public view (chunk id, section, visibility, retrieval score only), so the
+ * internal provenance (document ids, version, chunk index, similarity, provider/model) is read from the STORED record.
  * The failure-injection tests below use two independent, genuine ways to
  * make the real running stack's retrieval call actually fail — no
  * mocking — mirroring conventions already established elsewhere in this
@@ -26,6 +29,7 @@
  * validate-ai-service.mjs already uses) makes the real HTTP call to Python
  * genuinely fail to connect.
  */
+import "./lib/authFetch.mjs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -151,6 +155,13 @@ async function createSignal(body) {
   return trackCreated(res, "signalIds");
 }
 
+async function storedIntelligence(id) {
+  await connectDatabase();
+  const doc = await Intelligence.findById(id).lean();
+  await disconnectDatabase();
+  return doc;
+}
+
 async function cleanup() {
   await connectDatabase();
   // Phase 7F-C — every successful generate call now persists an
@@ -192,8 +203,9 @@ async function main() {
 
   const signalFull = await createSignal({ workspaceId: wsA, propertyId: propA, unitId: unitA, type: "maintenance", severity: "high", title: "AC not cooling", description: "Warm air blowing from the unit." });
 
-  const intelRes = await expectStatus("6H.1-4: generate intelligence with full-scope knowledge available", "POST", `/signals/${signalFull}/intelligence?workspaceId=${wsA}`, null, 200);
-  const provenance = intelRes.json?.data?.knowledgeProvenance || [];
+  const intelRes = await expectStatus("6H.1-4: generate intelligence with full-scope knowledge available", "POST", `/intelligence/analyze/${signalFull}?workspaceId=${wsA}`, null, 201);
+  const storedIntel = await storedIntelligence(intelRes.json?.data?._id);
+  const provenance = (storedIntel?.knowledgeProvenance || []).map((p) => JSON.parse(JSON.stringify(p)));
   const provenanceDocIds = provenance.map((p) => p.knowledgeDocumentId);
 
   if (provenanceDocIds.includes(unitDocId)) ok("6H.1: relevant Unit knowledge appears in knowledgeProvenance");
@@ -216,42 +228,46 @@ async function main() {
   // =========================================================
   const emptyWs = trackCreated(await expectStatus("6H.5: empty-workspace create", "POST", "/workspaces", { name: `Phase6H Empty WS ${stamp}`, slug: `phase6h-empty-ws-${stamp}` }, 201), "workspaceIds");
   const emptySignal = await createSignal({ workspaceId: emptyWs, type: "maintenance", title: "AC not cooling", description: "Warm air." });
-  const emptyRes = await expectStatus("6H.5: intelligence generation with zero eligible knowledge", "POST", `/signals/${emptySignal}/intelligence?workspaceId=${emptyWs}`, null, 200);
-  if (Array.isArray(emptyRes.json?.data?.knowledgeProvenance) && emptyRes.json.data.knowledgeProvenance.length === 0) {
-    ok("6H.5: knowledgeProvenance is an empty array, not an error, when nothing is retrieved");
+  const emptyRes = await expectStatus("6H.5: intelligence generation with zero eligible knowledge", "POST", `/intelligence/analyze/${emptySignal}?workspaceId=${emptyWs}`, null, 201);
+  const emptyProvenance = emptyRes.json?.data?.knowledgeProvenance;
+  if (emptyProvenance === undefined || (Array.isArray(emptyProvenance) && emptyProvenance.length === 0)) {
+    ok("6H.5: no knowledge provenance (absent or empty), not an error, when nothing is retrieved");
   } else {
-    fail("6H.5: knowledgeProvenance is an empty array, not an error, when nothing is retrieved", JSON.stringify(emptyRes.json));
+    fail("6H.5: no knowledge provenance (absent or empty), not an error, when nothing is retrieved", JSON.stringify(emptyRes.json));
   }
-  // The existing structured intelligence contract must still be fully present.
-  const stillValidShape = ["summary", "findings", "risk", "decision", "action", "outcome", "confidence", "provenance"].every(
-    (key) => emptyRes.json?.data?.[key] !== undefined,
+  // The V1 analysis contract must still be fully present with no knowledge.
+  const stillValidShape = ["situation", "evidence", "impact", "recommendation", "confidence"].every(
+    (key) => emptyRes.json?.data?.analysis?.[key] !== undefined,
   );
-  if (stillValidShape) ok("6H.17: existing intelligence schema fields remain present with no knowledge");
-  else fail("6H.17: existing intelligence schema fields remain present with no knowledge");
+  if (stillValidShape) ok("6H.17: the V1 analysis fields remain present with no knowledge");
+  else fail("6H.17: the V1 analysis fields remain present with no knowledge");
 
   // =========================================================
   // 14: provider/model provenance remains trusted
   // =========================================================
-  if (intelRes.json?.data?.provenance?.provider && intelRes.json?.data?.provenance?.model) {
-    ok("6H.14: provider/model provenance is still present and Node/Python-controlled");
+  if (storedIntel?.provider && storedIntel?.model) {
+    ok("6H.14: provider/model provenance is present on the STORED record and Node/Python-controlled");
   } else {
-    fail("6H.14: provider/model provenance is still present and Node/Python-controlled", JSON.stringify(intelRes.json?.data?.provenance));
+    fail("6H.14: provider/model provenance is present on the STORED record", JSON.stringify({ provider: storedIntel?.provider, model: storedIntel?.model }));
   }
+  const publicKeys = JSON.stringify(intelRes.json?.data || {});
+  if (!/"provider"|"model"/.test(publicKeys)) ok("6H.14b: the public response does not expose provider/model (Phase 24)");
+  else fail("6H.14b: the public response does not expose provider/model", publicKeys.slice(0, 200));
 
   // =========================================================
   // 15: cross-workspace knowledge cannot reach Gemini
   // =========================================================
   const wsBDocId = await createAndIndexDocument({ workspaceId: wsB, title: "B's own policy", documentType: "policy", content: KNOWLEDGE_TEXT });
   const wsASignalForCrossCheck = await createSignal({ workspaceId: wsA, type: "maintenance", title: "AC not cooling", description: "Warm air blowing from the unit." });
-  const crossRes = await expectStatus("6H.15: generate intelligence for workspace A signal", "POST", `/signals/${wsASignalForCrossCheck}/intelligence?workspaceId=${wsA}`, null, 200);
-  const crossProvenanceDocIds = (crossRes.json?.data?.knowledgeProvenance || []).map((p) => p.knowledgeDocumentId);
+  const crossRes = await expectStatus("6H.15: generate intelligence for workspace A signal", "POST", `/intelligence/analyze/${wsASignalForCrossCheck}?workspaceId=${wsA}`, null, 201);
+  const crossProvenanceDocIds = ((await storedIntelligence(crossRes.json?.data?._id))?.knowledgeProvenance || []).map((p) => p.knowledgeDocumentId);
   if (!crossProvenanceDocIds.includes(wsBDocId)) ok("6H.15: workspace B's knowledge never reaches workspace A's intelligence provenance");
   else fail("6H.15: workspace B's knowledge never reaches workspace A's intelligence provenance", JSON.stringify(crossProvenanceDocIds));
 
   // =========================================================
   // Tenant isolation on the intelligence endpoint itself (unchanged, re-verified with knowledge active)
   // =========================================================
-  await expectStatus("6H: cross-workspace signal returns 404", "POST", `/signals/${signalFull}/intelligence?workspaceId=${wsB}`, null, 404);
+  await expectStatus("6H: cross-workspace signal returns 404", "POST", `/intelligence/analyze/${signalFull}?workspaceId=${wsB}`, null, 404);
 
   // =========================================================
   // 2-4: retrieval FAILURE must never be treated as "nothing was found"
@@ -286,7 +302,7 @@ async function main() {
   const failureRes = await expectStatus(
     "6H.2: a genuine retrieval failure (Python rejects the request) does not return a successful intelligence result",
     "POST",
-    `/signals/${failureSignal}/intelligence?workspaceId=${failureWs}`,
+    `/intelligence/analyze/${failureSignal}?workspaceId=${failureWs}`,
     null,
     502,
   );
@@ -313,7 +329,7 @@ async function main() {
   // =========================================================
   const unreachableSignal = await createSignal({ workspaceId: wsA, type: "maintenance", title: "AC not cooling", description: "Warm air." });
   await withEphemeralServer(5095, { LLM_PROVIDER: "test-python", AI_SERVICE_URL: "http://localhost:5999" }, async (base) => {
-    const response = await fetch(`${base}/signals/${unreachableSignal}/intelligence?workspaceId=${wsA}`, { method: "POST" });
+    const response = await fetch(`${base}/intelligence/analyze/${unreachableSignal}?workspaceId=${wsA}`, { method: "POST" });
     const body = await response.json().catch(() => null);
     if (response.status === 502) {
       ok("6H.2b: Python retrieval service unreachable surfaces as a failure, not empty knowledge");

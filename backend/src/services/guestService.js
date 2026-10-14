@@ -13,6 +13,9 @@ import {
   toPlain,
 } from "./queryHelpers.js";
 
+const MAX_NAME_SEARCH_LENGTH = 100;
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+
 const UPDATABLE = [
   "externalId",
   "firstName",
@@ -53,8 +56,15 @@ export async function listGuests(query) {
   if (query.email) filter.email = String(query.email).toLowerCase();
   if (query.externalId) filter.externalId = query.externalId;
 
-  if (query.name) {
-    const pattern = new RegExp(String(query.name).trim(), "i");
+  // Case-insensitive SUBSTRING match on first or last name. The client's text is matched LITERALLY: every
+  // regex metacharacter is escaped, so no client-supplied pattern syntax ever reaches MongoDB, and the
+  // length is bounded. An empty / whitespace-only value applies no name filter (as before).
+  const name = typeof query.name === "string" ? query.name.trim() : "";
+  if (name) {
+    if (name.length > MAX_NAME_SEARCH_LENGTH) {
+      throw new AppError(`name must be at most ${MAX_NAME_SEARCH_LENGTH} characters`, 400);
+    }
+    const pattern = new RegExp(escapeRegex(name), "i");
     filter.$or = [{ firstName: pattern }, { lastName: pattern }];
   }
 

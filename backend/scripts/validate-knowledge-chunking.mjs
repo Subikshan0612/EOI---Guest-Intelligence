@@ -11,6 +11,7 @@
  * conventions exactly so it can run against the same already-running
  * backend instance.
  */
+import "./lib/authFetch.mjs";
 import { readFileSync } from "node:fs";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
 import { Workspace, Property, KnowledgeDocument, KnowledgeChunk } from "../src/models/index.js";

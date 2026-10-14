@@ -47,6 +47,10 @@ async function validateStayRefs({ workspaceId, guestId, propertyId, unitId }) {
 
   if (unitId) {
     const unit = await findByIdOr404(Unit, unitId, "Unit");
+    // A Unit of ANOTHER workspace is indistinguishable from a missing one (Phase 21); only after proving the Unit belongs to this
+    // workspace's own Property structure may a same-workspace mismatch be reported as a 400.
+    const unitProperty = await Property.findOne({ _id: unit.propertyId, workspaceId });
+    if (!unitProperty) throw new AppError("Unit not found", 404);
     if (String(unit.propertyId) !== String(propertyId)) {
       throw new AppError("Unit does not belong to the given property", 400);
     }

@@ -3,8 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "vite",
+    "dev:google": "vite --port 5175 --strictPort",
     "build": "vite build",
     "preview": "vite preview"
   },

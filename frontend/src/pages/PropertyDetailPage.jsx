@@ -6,6 +6,7 @@ import UnitForm from "../features/operations/UnitForm";
 import UnitRow from "../features/operations/UnitRow";
 import { usePropertyDetail } from "../features/operations/usePropertyDetail";
 import { formatStatusLabel } from "../features/operations/operationsMapping";
+import RetryButton from "../components/auth/RetryButton";
 
 export default function PropertyDetailPage() {
   const { propertyId } = useParams();
@@ -70,9 +71,7 @@ export default function PropertyDetailPage() {
           <p className="page-kicker">Operations</p>
           <h1 className="page-title">Couldn’t load this property</h1>
           <p className="page-lead">{error}</p>
-          <button type="button" className="text-button" onClick={reload}>
-            Try again
-          </button>
+          <RetryButton onClick={reload} />
         </section>
       </article>
     );
@@ -183,9 +182,7 @@ export default function PropertyDetailPage() {
         ) : unitsStatus === "error" ? (
           <section className="investigation-state" role="alert">
             <p className="page-lead">{unitsError || "Could not load units."}</p>
-            <button type="button" className="text-button" onClick={reloadUnits}>
-              Try again
-            </button>
+            <RetryButton onClick={reloadUnits} />
           </section>
         ) : units.length === 0 ? (
           <p className="muted">No units yet. Add the first one above.</p>

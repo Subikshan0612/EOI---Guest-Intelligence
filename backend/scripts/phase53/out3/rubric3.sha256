@@ -1,0 +1,31 @@
+{
+  "frozenAt": "2026-10-10T13:49:34.053Z",
+  "note": "Frozen BEFORE any Phase 53C Gemini call. dataset3.mjs = Learning-experiment dataset; rubric3.mjs = Learning rubric, improvement/regression definitions and decision rule; score3.mjs = scoring entry point. The baseline rubric (rubric2.mjs, dataset2.mjs, score2.mjs) is verified against out2/rubric2.sha256 (still unchanged).",
+  "files": {
+    "dataset3.mjs": "15e4ada89a6032bd005f6a05f011f3785b74868a51ac1bf0f6dfce5ba99e0512",
+    "rubric3.mjs": "e56f1464fd34af1a4fd782c5fe2d1832f85b8ae52524ee79b6a2b85ba08d3cce",
+    "score3.mjs": "6c25c5be6ab8d86134db51cd075229f024a28be107cadd21e48f66d788363523"
+  },
+  "baselineRubric": {
+    "files": {
+      "dataset2.mjs": "aedb521a77f40f2ecdb3173eba1502e89615ddadf1fc79c81f99ce4882a26575",
+      "rubric2.mjs": "69472b698cac78c7a1ca267697700b62f5c2fd94a142ff7b4943290353ee3ce7",
+      "score2.mjs": "ca428f1c03cd27d87e3d759266ca26bc3304c1697fa52a71cb19726fc74c55ba"
+    },
+    "matchesPhase53B1Freeze": true
+  },
+  "collectorNotScoring": {
+    "run-benchmark3.mjs": "7aad7c73f52a8c5c84ef46614b134ce220c56e55c3c254ae647f1bb7e9c803fb"
+  },
+  "calibration": {
+    "rubric3.selftest.mjs": "31 passed, 0 failed (synthetic inputs only)",
+    "rubric2.selftest.mjs": "re-run: unchanged"
+  },
+  "amendments": [
+    {
+      "at": "2026-10-11T09:00:07.819Z",
+      "what": "Run 1 was aborted after 52 analyses (50 real Gemini calls, repeat 1) when the working tree was restored; its artifacts are preserved in out3/aborted-run-1/ and are NOT used. rubric3.mjs, score3.mjs, rubric3.selftest.mjs and run-benchmark3.mjs were re-created from the same text; the frozen files re-hash to the values above (verified). The collector (not part of the frozen scoring set) was amended: knowledge-document embedding is now sequential with re-attempts and is fatal if incomplete (run 1 had 17 of 36 knowledge replicas with a failed embedding call, which would have made RAG-hit scenarios invalid).",
+      "collectorSha256": "7aad7c73f52a8c5c84ef46614b134ce220c56e55c3c254ae647f1bb7e9c803fb"
+    }
+  ]
+}

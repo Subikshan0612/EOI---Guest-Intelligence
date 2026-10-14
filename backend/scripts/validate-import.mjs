@@ -13,6 +13,7 @@
  * Requires a running backend server reachable at API_BASE (same convention
  * as validate-api.mjs) and MongoDB reachable via the backend's own config.
  */
+import "./lib/authFetch.mjs";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
 import { importOperationalCsv } from "../src/services/import/importService.js";
 import {

@@ -4,6 +4,7 @@ import { Building2, Plus } from "lucide-react";
 import PropertyForm from "../features/operations/PropertyForm";
 import { useProperties } from "../features/operations/useProperties";
 import { formatStatusLabel } from "../features/operations/operationsMapping";
+import RetryButton from "../components/auth/RetryButton";
 
 export default function PropertiesPage() {
   const { properties, status, error, reload, createProperty } = useProperties();
@@ -31,8 +32,8 @@ export default function PropertiesPage() {
           <p className="page-kicker">Operations</p>
           <h1 className="page-title">Properties</h1>
           <p className="page-lead">
-            The properties in this workspace, and the units EOI will eventually resolve signals
-            against.
+            The properties in this workspace and their units. The assistant uses these records to understand where something
+            happened.
           </p>
         </div>
         <button
@@ -64,9 +65,7 @@ export default function PropertiesPage() {
       ) : status === "error" ? (
         <section className="investigation-state" role="alert">
           <p className="page-lead">{error || "Could not load properties."}</p>
-          <button type="button" className="text-button" onClick={reload}>
-            Try again
-          </button>
+          <RetryButton onClick={reload} />
         </section>
       ) : properties.length === 0 ? (
         <section className="investigation-state">

@@ -18,6 +18,7 @@
  * requirement validate-knowledge-grounding.mjs and
  * validate-intelligence-persistence.mjs already have.
  */
+import "./lib/authFetch.mjs";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -688,12 +689,12 @@ async function main() {
   await expectUploadStatus(
     "7FD2.24: cross-workspace propertyId rejected",
     { fields: { workspaceId: wsA, propertyId: propB, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: "x", filename: "x.txt" },
-    400,
+    404,
   );
   await expectUploadStatus(
     "7FD2.25: cross-workspace unitId rejected",
     { fields: { workspaceId: wsA, unitId: unitB, title: "X", documentType: "guideline", isTestData: "true" }, fileBytes: "x", filename: "x.txt" },
-    400,
+    404,
   );
 
   // =========================================================
@@ -728,7 +729,7 @@ async function main() {
   await expectUploadStatus(
     "7FD2.26: cross-workspace supersedesId rejected",
     { fields: { workspaceId: wsB, title: "Hijack attempt", documentType: "sop", isTestData: "true", supersedesId: superV2Id }, fileBytes: "x", filename: "x.txt" },
-    400,
+    404,
   );
 
   // =========================================================
@@ -757,7 +758,10 @@ async function main() {
   const chunkRows = chunksAfterUpload.json?.data || [];
   if (chunkRows.length > 0) ok("7FD2.29: the uploaded TXT document already has chunks (created synchronously as part of the upload)");
   else fail("7FD2.29: the uploaded TXT document already has chunks", JSON.stringify(chunkRows));
-  const allEmbedded = chunkRows.length > 0 && chunkRows.every((c) => Array.isArray(c.embedding) && c.embedding.length > 0);
+// Phase 14: chunk HTTP responses no longer carry embedding vectors, so vectors are verified where they live (MongoDB).
+  await connectDatabase();
+  const storedTxtChunks = await KnowledgeChunk.find({ documentId: txtId }).select("+embedding").lean();
+  const allEmbedded = chunkRows.length > 0 && storedTxtChunks.length === chunkRows.length && storedTxtChunks.every((c) => Array.isArray(c.embedding) && c.embedding.length > 0);
   if (allEmbedded) ok("7FD2.30: every chunk of the uploaded document already has an embedding (created synchronously as part of the upload, via the existing embedding pipeline)");
   else fail("7FD2.30: every chunk of the uploaded document already has an embedding", JSON.stringify(chunkRows));
 
@@ -798,17 +802,22 @@ async function main() {
   const intelRes = await expectStatus(
     "7FD2.32: generate knowledge-grounded intelligence for the signal",
     "POST",
-    `/signals/${ragSignal}/intelligence?workspaceId=${wsA}`,
+    `/intelligence/analyze/${ragSignal}?workspaceId=${wsA}`,
     null,
-    200,
+    201,
   );
-  const provenanceDocIds = (intelRes.json?.data?.knowledgeProvenance || []).map((p) => p.knowledgeDocumentId);
+  // Phase 24: the generate response is the sanitized public view (no document ids); trace provenance on the STORED record.
+  await connectDatabase();
+  const storedForProvenance = await Intelligence.findById(intelRes.json?.data?._id).lean();
+  await disconnectDatabase();
+  const storedProvenance = (storedForProvenance?.knowledgeProvenance || []).map((p) => JSON.parse(JSON.stringify(p)));
+  const provenanceDocIds = storedProvenance.map((p) => p.knowledgeDocumentId);
   if (provenanceDocIds.includes(ragDocId)) {
     ok("7FD2.32: RAG provenance correctly identifies the uploaded KnowledgeDocument as a grounding source");
   } else {
     fail("7FD2.32: RAG provenance correctly identifies the uploaded KnowledgeDocument as a grounding source", JSON.stringify(provenanceDocIds));
   }
-  const uploadedChunk = (intelRes.json?.data?.knowledgeProvenance || []).find((p) => p.knowledgeDocumentId === ragDocId);
+  const uploadedChunk = storedProvenance.find((p) => p.knowledgeDocumentId === ragDocId);
   if (uploadedChunk?.chunkId && Number.isInteger(uploadedChunk?.version) && typeof uploadedChunk?.section === "string" && Number.isInteger(uploadedChunk?.chunkIndex) && typeof uploadedChunk?.retrievalScore === "number") {
     ok("7FD2.32b: provenance for the uploaded document retains chunkId/version/section/chunkIndex/scores, unchanged from the existing mechanism");
   } else {
@@ -816,8 +825,10 @@ async function main() {
   }
 
   // The persisted (7F-C) Intelligence record's own provenance must trace to the same uploaded document too.
-  const persistedIntel = await request("GET", `/intelligence/${intelRes.json?.data?._id}?workspaceId=${wsA}`);
-  const persistedProvenanceDocIds = (persistedIntel.json?.data?.knowledgeProvenance || []).map((p) => p.knowledgeDocumentId);
+  // Phase 14: the raw HTTP read no longer exposes knowledgeDocumentId, so trace it on the stored record itself.
+  await connectDatabase();
+  const persistedIntel = await Intelligence.findById(intelRes.json?.data?._id).lean();
+  const persistedProvenanceDocIds = (persistedIntel?.knowledgeProvenance || []).map((p) => p.knowledgeDocumentId);
   if (persistedProvenanceDocIds.includes(ragDocId)) {
     ok("7FD2.32c: the PERSISTED Intelligence record's provenance also traces to the uploaded KnowledgeDocument");
   } else {
@@ -911,9 +922,10 @@ async function main() {
   if (validPdfAfter.json?.data?.ingestionStatus === "ready") ok("7FD3.1: document reaches ingestionStatus:ready (embedding already ran synchronously)");
   else fail("7FD3.1: document reaches ingestionStatus:ready", JSON.stringify(validPdfAfter.json?.data));
   // Verify through the actual persisted chunks, not just the HTTP response.
+  await connectDatabase();
   const validPdfChunks = await request("GET", `/knowledge-documents/${validPdfId}/chunks?workspaceId=${wsA}`);
   const validPdfChunkRows = validPdfChunks.json?.data || [];
-  if (validPdfChunkRows.length > 0 && validPdfChunkRows.every((c) => c.text.includes(pdfContent.split(".")[0]) || c.text.length > 0) && validPdfChunkRows.every((c) => Array.isArray(c.embedding) && c.embedding.length > 0)) {
+  if (validPdfChunkRows.length > 0 && validPdfChunkRows.every((c) => c.text.includes(pdfContent.split(".")[0]) || c.text.length > 0) && (await KnowledgeChunk.find({ documentId: validPdfId }).select("+embedding").lean()).every((c) => Array.isArray(c.embedding) && c.embedding.length > 0)) {
     ok("7FD3.1: the persisted KnowledgeChunk rows contain real extracted text and are fully embedded");
   } else {
     fail("7FD3.1: the persisted KnowledgeChunk rows contain real extracted text and are fully embedded", JSON.stringify(validPdfChunkRows));

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { KNOWLEDGE_STATUSES } from "./KnowledgeDocument.js";
+import { VISIBILITY_LEVELS } from "../services/knowledge/visibility.js";
 
 /**
  * Phase 6B — schema only. Nothing in this codebase creates a KnowledgeChunk
@@ -90,6 +91,18 @@ const knowledgeChunkSchema = new mongoose.Schema(
     text: {
       type: String,
       required: true,
+    },
+
+    // Who may see this chunk: guest < staff < restricted (see
+    // services/knowledge/visibility.js). Defaults to the MOST restrictive
+    // level, so a code path that forgets to set it can never expose a chunk
+    // to a lower-level caller. Enforced by Node in retrieval candidate
+    // selection and in the direct knowledge APIs. Deliberately NOT part of
+    // the embedding input (see services/knowledge/embeddingText.js).
+    visibility: {
+      type: String,
+      enum: VISIBILITY_LEVELS,
+      default: "restricted",
     },
 
     // Populated at ingestion time (Phase 6E), absent until then.

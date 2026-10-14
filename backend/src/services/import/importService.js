@@ -5,6 +5,7 @@ import { Property } from "../../models/Property.js";
 import { Stay } from "../../models/Stay.js";
 import { Unit } from "../../models/Unit.js";
 import { Workspace } from "../../models/Workspace.js";
+import { getImportLimits } from "../../config/runtimeConfig.js";
 import { AppError } from "../../utils/AppError.js";
 import { requireObjectId } from "../../utils/objectId.js";
 import {
@@ -238,6 +239,12 @@ export async function importOperationalCsv({
   if (!headerRow || headerRow.length === 0) {
     throw new AppError("CSV file has no header row", 400);
   }
+  // Resource limits (Phase 21), all configurable (see config/runtimeConfig.js getImportLimits). The whole file is refused,
+  // and nothing is written, BEFORE any row is processed. They bound memory and the number of synchronous per-row DB round trips.
+  const limits = getImportLimits();
+  if (headerRow.length > limits.maxColumns) {
+    throw new AppError(`CSV file has more than ${limits.maxColumns} columns`, 400, { code: "IMPORT_LIMIT_COLUMNS" });
+  }
 
   // File-level checks must all pass before any row is touched. Duplicate
   // headers make column mapping ambiguous, so the whole file is rejected here
@@ -250,9 +257,22 @@ export async function importOperationalCsv({
 
   let rows;
   try {
-    rows = parse(buffer, { columns: true, bom: true, trim: true, skip_empty_lines: true });
+    // `to` stops the parser one record past the limit (so a huge file is never fully materialised); `max_record_size`
+    // bounds a single record (a quoted field that never closes cannot swallow the file).
+    rows = parse(buffer, { columns: true, bom: true, trim: true, skip_empty_lines: true, to: limits.maxRows + 1, max_record_size: limits.maxRecordBytes });
   } catch (error) {
+    if (error.code === "CSV_MAX_RECORD_SIZE") throw new AppError(`A CSV record is larger than ${limits.maxRecordBytes} bytes`, 400, { code: "IMPORT_LIMIT_RECORD" });
     throw new AppError(`Malformed CSV file (${error.code || "parse error"})`, 400);
+  }
+  if (rows.length > limits.maxRows) {
+    throw new AppError(`CSV file has more than ${limits.maxRows} data rows`, 400, { code: "IMPORT_LIMIT_ROWS" });
+  }
+  for (let index = 0; index < rows.length; index += 1) {
+    for (const value of Object.values(rows[index])) {
+      if (typeof value === "string" && value.length > limits.maxFieldLength) {
+        throw new AppError(`Row ${index + 2}: a field is longer than ${limits.maxFieldLength} characters`, 400, { code: "IMPORT_LIMIT_FIELD" });
+      }
+    }
   }
 
   const importBatch = await ImportBatch.create({

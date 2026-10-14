@@ -1,0 +1,9 @@
+{
+  "frozenAt": "2026-10-10T13:08:28.531Z",
+  "note": "Hashes taken BEFORE the repeated run and before any Gemini call of Phase 53B.1. Rubric v2 was calibrated only against the earlier Phase 53B outputs (rubric2.selftest.mjs).",
+  "files": {
+    "dataset2.mjs": "aedb521a77f40f2ecdb3173eba1502e89615ddadf1fc79c81f99ce4882a26575",
+    "rubric2.mjs": "69472b698cac78c7a1ca267697700b62f5c2fd94a142ff7b4943290353ee3ce7",
+    "score2.mjs": "ca428f1c03cd27d87e3d759266ca26bc3304c1697fa52a71cb19726fc74c55ba"
+  }
+}

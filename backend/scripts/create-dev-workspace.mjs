@@ -12,6 +12,8 @@
  * It never deletes anything. Remove the workspace manually if you no longer
  * want it.
  */
+import { requireLoopbackDatabase } from "../src/config/mongoSafety.js";
+requireLoopbackDatabase("create-dev-workspace"); // never silently operate on a remote database (see src/config/mongoSafety.js)
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
 import { Workspace } from "../src/models/index.js";
 

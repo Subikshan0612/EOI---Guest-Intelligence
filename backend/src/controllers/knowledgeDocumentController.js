@@ -5,10 +5,11 @@ import * as knowledgeDocumentService from "../services/knowledgeDocumentService.
 import * as knowledgeChunkService from "../services/knowledgeChunkService.js";
 import * as knowledgeEmbeddingService from "../services/knowledgeEmbeddingService.js";
 import { extractDocumentText, sanitizeFilename } from "../services/knowledge/documentExtractor.js";
+import { getAuthorizedKnowledgeLevel } from "../middleware/knowledgeAccess.js";
 
 export const createKnowledgeDocument = asyncHandler(async (req, res) => {
-  const data = await knowledgeDocumentService.createKnowledgeDocument(req.body);
-  sendSuccess(res, data, 201);
+  const data = await knowledgeDocumentService.createKnowledgeDocument({ ...req.body, workspaceId: req.actor.workspaceId });
+  sendSuccess(res, await knowledgeDocumentService.redactDocumentForLevel(data, getAuthorizedKnowledgeLevel(req)), 201);
 });
 
 /**
@@ -51,6 +52,7 @@ export const uploadKnowledgeDocument = asyncHandler(async (req, res) => {
 
   const data = await knowledgeDocumentService.createKnowledgeDocument({
     ...req.body,
+    workspaceId: req.actor.workspaceId,
     isTestData,
     content: text,
     sourceType,
@@ -73,24 +75,30 @@ export const uploadKnowledgeDocument = asyncHandler(async (req, res) => {
     await knowledgeChunkService.rebuildChunksForDocument(data._id, data.workspaceId);
     await knowledgeEmbeddingService.embedKnowledgeDocument(data._id, data.workspaceId);
   } catch (error) {
-    if (error instanceof AppError && error.details === undefined) {
-      error.details = { knowledgeDocumentId: data._id };
+    // Merged, not "only when absent": AI-service errors carry a stable `details.code` (Phase 34A-B / 35), and the id must not be lost
+    // because the error was already classified. Existing details (the code) are kept as they are.
+    if (error instanceof AppError) {
+      error.details = { ...(error.details ?? {}), knowledgeDocumentId: data._id };
     }
     throw error;
   }
 
-  sendSuccess(res, data, 201);
+  sendSuccess(res, await knowledgeDocumentService.redactDocumentForLevel(data, getAuthorizedKnowledgeLevel(req)), 201);
 });
 
 export const listKnowledgeDocuments = asyncHandler(async (req, res) => {
-  const { items, pagination } = await knowledgeDocumentService.listKnowledgeDocuments(req.query);
+  const { items, pagination } = await knowledgeDocumentService.listKnowledgeDocuments(
+    { ...req.query, workspaceId: req.actor.workspaceId },
+    getAuthorizedKnowledgeLevel(req),
+  );
   sendList(res, items, pagination);
 });
 
 export const getKnowledgeDocument = asyncHandler(async (req, res) => {
   const data = await knowledgeDocumentService.getKnowledgeDocumentById(
     req.params.id,
-    req.query.workspaceId,
+    req.actor.workspaceId,
+    getAuthorizedKnowledgeLevel(req),
   );
   sendSuccess(res, data);
 });
@@ -99,24 +107,27 @@ export const updateKnowledgeDocument = asyncHandler(async (req, res) => {
   const data = await knowledgeDocumentService.updateKnowledgeDocument(
     req.params.id,
     req.body,
-    req.query.workspaceId,
+    req.actor.workspaceId,
   );
-  sendSuccess(res, data);
+  sendSuccess(res, await knowledgeDocumentService.redactDocumentForLevel(data, getAuthorizedKnowledgeLevel(req)));
 });
 
 export const deleteKnowledgeDocument = asyncHandler(async (req, res) => {
   const data = await knowledgeDocumentService.deleteKnowledgeDocument(
     req.params.id,
-    req.query.workspaceId,
+    req.actor.workspaceId,
   );
-  sendSuccess(res, data);
+  // The delete response echoes the removed document, so it gets the same
+  // content redaction as every other response that returns the document.
+  sendSuccess(res, await knowledgeDocumentService.redactDocumentForLevel(data, getAuthorizedKnowledgeLevel(req)));
 });
 
 /** Phase 6D — (re)chunks the document's current canonical content. No request body: chunking derives entirely from the document Node already holds. */
 export const chunkKnowledgeDocument = asyncHandler(async (req, res) => {
   const data = await knowledgeChunkService.rebuildChunksForDocument(
     req.params.documentId,
-    req.query.workspaceId,
+    req.actor.workspaceId,
+    { authorizedLevel: getAuthorizedKnowledgeLevel(req) },
   );
   sendSuccess(res, data, 201);
 });
@@ -125,7 +136,8 @@ export const listKnowledgeChunks = asyncHandler(async (req, res) => {
   const { items, pagination } = await knowledgeChunkService.listKnowledgeChunks(
     req.params.documentId,
     req.query,
-    req.query.workspaceId,
+    req.actor.workspaceId,
+    getAuthorizedKnowledgeLevel(req),
   );
   sendList(res, items, pagination);
 });
@@ -134,7 +146,7 @@ export const listKnowledgeChunks = asyncHandler(async (req, res) => {
 export const embedKnowledgeDocument = asyncHandler(async (req, res) => {
   const data = await knowledgeEmbeddingService.embedKnowledgeDocument(
     req.params.documentId,
-    req.query.workspaceId,
+    req.actor.workspaceId,
   );
   sendSuccess(res, data, 201);
 });

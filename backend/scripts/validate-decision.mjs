@@ -1,3 +1,4 @@
+import "./lib/authFetch.mjs";
 /**
  * Phase 7A validation: Decision Foundation.
  *
@@ -24,12 +25,13 @@
  * — irrelevant to this suite functionally, since decisions never call AI,
  * but kept consistent with the project's "deterministic providers only in
  * automated suites" rule). Every fixture is cleaned up from MongoDB at the
- * end, mirroring validate-api.mjs / validate-intelligence.mjs conventions.
+ * end, mirroring validate-api.mjs conventions.
  */
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
+import { cleanupAuthFixtures, decisionAuthHeaders } from "./lib/authFixtures.mjs";
 import { Workspace, Intelligence, Decision, Action, Outcome } from "../src/models/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -61,7 +63,7 @@ function fail(name, detail = "") {
 async function request(method, path, body) {
   const response = await fetch(`${BASE}${path}`, {
     method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: await decisionAuthHeaders(method, path, body ? { "Content-Type": "application/json" } : undefined),
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -134,6 +136,7 @@ function waitForHealth(timeoutMs = 15000) {
 
 async function cleanup() {
   await connectDatabase();
+  await cleanupAuthFixtures();
   await Promise.all([
     Outcome.deleteMany({ _id: { $in: created.outcomeIds } }),
     Action.deleteMany({ _id: { $in: created.actionIds } }),
@@ -219,7 +222,7 @@ async function main() {
         "POST",
         "/decisions",
         { workspaceId: wsA, intelligenceId: intelB, description: "x" },
-        400,
+        404,
       ),
       "decisionIds",
     );
@@ -229,7 +232,7 @@ async function main() {
         "POST",
         "/decisions",
         { workspaceId: wsB, intelligenceId: intelA, description: "x" },
-        400,
+        404,
       ),
       "decisionIds",
     );
@@ -412,7 +415,7 @@ async function main() {
         "POST",
         "/actions",
         { workspaceId: wsB, intelligenceId: intelB, decisionId: decisionA, description: "x" },
-        400,
+        404,
       ),
       "actionIds",
     );

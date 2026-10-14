@@ -70,8 +70,10 @@ export const stays = [
   },
 ];
 
+// Neutral on purpose: this is a Phase 1 placeholder, not the real workspace or
+// property (real properties come from the API). Don't put a property name here.
 export const workspace = {
-  name: "Harbour Residences",
+  name: "Workspace",
   profileLabel: "Operations",
   initials: "Ops",
 };

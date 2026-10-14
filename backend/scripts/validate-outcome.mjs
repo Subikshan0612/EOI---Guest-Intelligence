@@ -1,3 +1,4 @@
+import "./lib/authFetch.mjs";
 /**
  * Phase 7C validation: Outcome Foundation.
  *
@@ -33,6 +34,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
+import { cleanupAuthFixtures, decisionAuthHeaders } from "./lib/authFixtures.mjs";
 import { Workspace, Intelligence, Decision, Action, Outcome } from "../src/models/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,7 +66,7 @@ function fail(name, detail = "") {
 async function request(method, path, body) {
   const response = await fetch(`${BASE}${path}`, {
     method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: await decisionAuthHeaders(method, path, body ? { "Content-Type": "application/json" } : undefined),
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -137,6 +139,7 @@ function waitForHealth(timeoutMs = 15000) {
 
 async function cleanup() {
   await connectDatabase();
+  await cleanupAuthFixtures();
   await Promise.all([
     Outcome.deleteMany({ _id: { $in: created.outcomeIds } }),
     Action.deleteMany({ _id: { $in: created.actionIds } }),
@@ -258,8 +261,8 @@ async function main() {
 
     await expectStatus("A3: missing Intelligence rejected", "POST", "/outcomes", { workspaceId: wsA, intelligenceId: fakeId }, 404);
     await expectStatus("A4: missing Action rejected", "POST", "/outcomes", { workspaceId: wsA, intelligenceId: intelA, actionId: fakeId }, 404);
-    await expectStatus("A5: cross-workspace Intelligence rejected", "POST", "/outcomes", { workspaceId: wsA, intelligenceId: intelB }, 400);
-    await expectStatus("A6: cross-workspace Action rejected", "POST", "/outcomes", { workspaceId: wsA, intelligenceId: intelA, actionId: actionB }, 400);
+    await expectStatus("A5: cross-workspace Intelligence rejected", "POST", "/outcomes", { workspaceId: wsA, intelligenceId: intelB }, 404);
+    await expectStatus("A6: cross-workspace Action rejected", "POST", "/outcomes", { workspaceId: wsA, intelligenceId: intelA, actionId: actionB }, 404);
     await expectStatus("A7: same-workspace Action with different Intelligence rejected", "POST", "/outcomes", { workspaceId: wsA, intelligenceId: intelA, actionId: actionWrongIntel }, 400);
 
     trackCreated(
@@ -337,7 +340,7 @@ async function main() {
       "PATCH",
       `/outcomes/${outcome2}?workspaceId=${wsA}`,
       { actionId: actionB },
-      400,
+      404,
     );
     await expectStatus(
       "20: mismatched-Intelligence Action reassignment rejected",

@@ -61,6 +61,7 @@ def knowledge_item(chunk_id: str, scope: str, text: str = "Example only. Synthet
         "knowledgeDocumentId": f"doc-{chunk_id}",
         "version": 1,
         "scope": scope,
+        "visibility": "guest",
         "section": "AC Troubleshooting",
         "chunkIndex": 0,
         "text": text,
@@ -102,7 +103,7 @@ def test_prompt_includes_knowledge_provenance_inline():
     _, user_prompt = _build([knowledge_item("c1", "unit", section="AC Troubleshooting")])
     knowledge_section = user_prompt[user_prompt.index("=== RETRIEVED ORGANIZATIONAL KNOWLEDGE ==="):]
     assert "c1" in knowledge_section
-    assert "doc-c1" in knowledge_section
+    assert "doc-c1" not in knowledge_section  # Phase 25: internal document ids are not shown to the model
     assert "unit" in knowledge_section
     assert "AC Troubleshooting" in knowledge_section
     assert "Example only. Synthetic SOP text for testing." in knowledge_section
@@ -160,7 +161,7 @@ def test_prompt_with_relevant_workspace_knowledge():
 def test_prompt_with_multiple_knowledge_chunks():
     _, user_prompt = _build([knowledge_item("c1", "unit"), knowledge_item("c2", "workspace")])
     assert "c1" in user_prompt and "c2" in user_prompt
-    assert "doc-c1" in user_prompt and "doc-c2" in user_prompt
+    assert "doc-c1" not in user_prompt and "doc-c2" not in user_prompt  # Phase 25
 
 
 def test_prompt_with_no_knowledge_says_so_explicitly_and_never_fabricates():

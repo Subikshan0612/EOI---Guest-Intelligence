@@ -28,28 +28,31 @@ Python service that sits between the existing Node/Express backend and an LLM pr
   will pass it to this service as an already-validated payload; this service never
   queries for it independently.
 - The public API surface consumed by the React frontend — the frontend only ever talks
-  to Node (`POST /api/signals/:id/intelligence`); it has no knowledge this service exists.
+  to Node (`POST /api/intelligence/analyze/:signalId`); it has no knowledge this service exists.
 - Authentication/authorization — handled upstream in Node when it is eventually added.
 
-## Current Phase 5 scope (Step 4)
+## Current scope
 
-**Real Gemini execution now lives here**, reached only via Node's
-`POST /api/signals/:id/intelligence`:
+**Real Gemini execution lives here**, reached only via Node's single generation route,
+`POST /api/intelligence/analyze/:signalId` (Intelligence V1; since Phase 24 the legacy
+`POST /api/signals/:id/intelligence` and Node's own provider branches are gone):
 
 ```
-Node assembleSignalContext() -> aiServiceClient.js -> POST /v1/intelligence/signal
+Node analysisContextService (workspace-scoped context, guest contact/name removed)
+  + Node knowledge retrieval (POST /v1/knowledge-retrieval)
+  -> aiServiceClient.js -> POST /v1/intelligence/analyze
   -> this service's own LLM_PROVIDER decides:
-       "test"   -> deterministic stub (no network call) — the default
+       "test"   -> deterministic stub (no network call) - the default
        "gemini" -> real call via the official google-genai SDK
-  -> validated IntelligenceResponse -> Node re-validates -> React
+  -> validated AnalysisResponse -> Node re-validates (closed schema, provenance <= retrieved chunks) -> persists -> sanitized view
 ```
 
 This service still does not: talk to MongoDB, know about tenants/workspaces, or persist
-anything. Node's own pre-Step-4 direct Gemini implementation was removed in Phase 5 Step 5's
-cleanup once it became genuinely dead code (nothing routed `LLM_PROVIDER=gemini` to it any
-more). `backend/src/services/ai/llmProvider.js` still exists and is still used, but only for
-its `openai` (direct Node→OpenAI, unaffected by any of this) and `test` (Node-level
-deterministic fixture) branches — it has no Gemini code or Gemini dependency left.
+anything. Node has no Gemini or OpenAI client of its own.
+
+**Legacy endpoint:** `POST /v1/intelligence/signal` (the pre-V1 contract) still exists in this service, with its
+tests, but **nothing in Node calls it any more** (Phase 24). It receives whatever context its caller sends, so it must not be
+given guest contact details; it is a candidate for removal in a later cleanup.
 
 ## Responsibility split (Node vs. this service)
 
@@ -97,8 +100,11 @@ Windows (PowerShell):
 
 ### 3. Install dependencies
 
+Python **3.12.6** (see `.python-version`). `constraints.txt` fixes every package to the exact version the test suite passed on, so install with it:
+
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt -c constraints.txt        # production / deployment
+pip install -r requirements-dev.txt -c constraints.txt    # development and tests (adds pytest)
 ```
 
 ### 4. Configure environment (optional at this step)

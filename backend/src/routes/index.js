@@ -14,6 +14,8 @@ import { outcomeRoutes } from "./outcomeRoutes.js";
 import { knowledgeDocumentRoutes } from "./knowledgeDocumentRoutes.js";
 import { learningRoutes } from "./learningRoutes.js";
 import { importRoutes } from "./importRoutes.js";
+import { dashboardRoutes } from "./dashboardRoutes.js";
+import { authRoutes } from "./authRoutes.js";
 
 const apiRouter = Router();
 
@@ -32,5 +34,7 @@ apiRouter.use("/outcomes", outcomeRoutes);
 apiRouter.use("/knowledge-documents", knowledgeDocumentRoutes);
 apiRouter.use("/learning", learningRoutes);
 apiRouter.use("/imports", importRoutes);
+apiRouter.use("/dashboard", dashboardRoutes);
+apiRouter.use("/auth", authRoutes);
 
 export { apiRouter };

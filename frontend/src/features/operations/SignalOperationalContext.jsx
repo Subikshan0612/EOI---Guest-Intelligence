@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { describeHistoryMatch, formatStatusLabel } from "./operationsMapping";
 import { formatShortDate, formatStayDate } from "../../utils/formatDate";
+import RetryButton from "../../components/auth/RetryButton";
 
 /**
  * Renders the Phase 3D `/signals/:id/context` response — Guest/Stay/Property/
@@ -21,9 +22,7 @@ export default function SignalOperationalContext({ context, status, error, onRet
         ) : status === "error" ? (
           <p className="op-form-error" role="alert">
             {error}{" "}
-            <button type="button" className="text-button" onClick={onRetry}>
-              Try again
-            </button>
+            <RetryButton onClick={onRetry} />
           </p>
         ) : status === "ready" && context ? (
           context.guest || context.stay || context.property || context.unit ? (

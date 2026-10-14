@@ -57,18 +57,17 @@ General:
 def _format_knowledge_section(knowledge: list[KnowledgeItem]) -> str:
     if not knowledge:
         return (
-            "No organizational knowledge was retrieved for this Signal. Reason from the "
-            "operational context alone — do not assume, invent, or reference any policy, "
-            "SOP, or procedure that has not been supplied to you."
+            "No organizational knowledge was retrieved for this Signal: nothing sufficiently relevant "
+            "was found. Reason from the operational context alone — do not assume, invent, or "
+            "reference any policy, SOP, or procedure that has not been supplied to you."
         )
 
     blocks = []
     for item in knowledge:
         section_label = " › ".join(item.sectionPath) or item.section or "(no section heading)"
-        header = (
-            f'[chunkId: {item.chunkId} | scope: {item.scope} | document: {item.knowledgeDocumentId} '
-            f'v{item.version} | section: "{section_label}"]'
-        )
+        # Phase 25: only what grounding needs. The chunk id is the citation handle (usedKnowledgeChunkIds); the
+        # internal document id / version, chunk index and retrieval scores are NOT shown to the model.
+        header = f'[chunkId: {item.chunkId} | scope: {item.scope} | section: "{section_label}"]'
         blocks.append(f"{header}\n{item.text}")
 
     return "\n\n".join(blocks)

@@ -12,6 +12,7 @@
  * Mirrors validate-api.mjs/validate-knowledge.mjs's own conventions exactly
  * so it can run against the same already-running backend instance.
  */
+import "./lib/authFetch.mjs";
 import { connectDatabase, disconnectDatabase } from "../src/config/database.js";
 import { Workspace, Property, Unit, KnowledgeDocument, KnowledgeChunk } from "../src/models/index.js";
 
@@ -445,7 +446,7 @@ async function main() {
       "POST",
       "/knowledge-documents",
       { workspaceId: wsB, title: "Hijack attempt", documentType: "sop", content: "x", supersedesId: wsWideId },
-      400,
+      404,
     ),
     "knowledgeDocumentIds",
   );

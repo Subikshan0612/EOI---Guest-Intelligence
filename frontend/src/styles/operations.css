@@ -735,3 +735,106 @@ a.op-stay-property:hover {
   flex-direction: column;
   gap: var(--space-12);
 }
+
+/* Phase 43B.2 - two distinct things, styled distinctly. Meaning is always carried by visible text (never colour alone); text wraps instead of clipping at any width; no animation. */
+
+/* (1) RECORDED signal severity: a compact labelled note - a recorded fact, deliberately quieter than the validated alert below. */
+.severity-note {
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  border-left: 4px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-sm, 0.875rem);
+  overflow-wrap: anywhere;
+}
+
+.severity-note-value {
+  color: var(--color-danger);
+  letter-spacing: var(--tracking-wide);
+}
+
+.severity-note-detail {
+  color: var(--color-text-secondary);
+}
+
+/* (2) VALIDATED safety assessment of an analysis (server-validated structured result): the alert is the one prominent element. */
+.safety-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16);
+  border: 2px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+  color: var(--color-text);
+}
+
+.safety-alert-icon {
+  flex: none;
+  margin-top: 0.15rem;
+  color: var(--color-danger);
+}
+
+.safety-alert-copy {
+  min-width: 0;
+}
+
+.safety-alert-kicker {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.safety-alert-headline {
+  margin: var(--space-2, 0.125rem) 0 0;
+  font-size: var(--font-size-lg, 1.125rem);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+.safety-alert-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin: var(--space-8) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.safety-alert-flags li {
+  padding: var(--space-2, 0.125rem) var(--space-8);
+  border: 1.5px solid var(--color-danger);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--color-elevated);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm, 0.875rem);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+}
+
+.safety-alert-detail {
+  margin: var(--space-8) 0 0;
+  font-size: var(--font-size-sm, 0.875rem);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* NORMAL / not recorded / not recognised: a quiet single line - no alarm styling. */
+.safety-quiet {
+  margin: 0;
+  font-size: var(--font-size-sm, 0.875rem);
+  overflow-wrap: anywhere;
+}
+
+/* NORMAL + a structured escalation action type: emphasised, but deliberately NOT alarm styling (normal text colour, no border, no icon, no live region). */
+.safety-note {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}

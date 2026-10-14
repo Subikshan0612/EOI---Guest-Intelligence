@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import mongoose from "mongoose";
+import { KnowledgeChunk } from "../models/KnowledgeChunk.js";
 import { KnowledgeDocument } from "../models/KnowledgeDocument.js";
 import { Property } from "../models/Property.js";
 import { Unit } from "../models/Unit.js";
@@ -17,6 +19,13 @@ import {
   requireFields,
   toPlain,
 } from "./queryHelpers.js";
+import {
+  allowedVisibilities,
+  canAccess,
+  isValidVisibility,
+  maxVisibility,
+} from "./knowledge/visibility.js";
+import { getCorpusProfile } from "./knowledge/corpusProfiles.js";
 
 /**
  * Phase 6B — thin CRUD only. Phase 6C confirmed this same POST is the
@@ -45,6 +54,7 @@ const UPDATABLE = [
   "effectiveTo",
   "sourceFilename",
   "isTestData",
+  "defaultVisibility",
 ];
 
 /** effectiveFrom/effectiveTo must be valid dates when supplied; both are optional. */
@@ -102,6 +112,85 @@ function assertValidBoolean(value, fieldName) {
  * existing `content` field's own comment). Same input always produces the
  * same hash; never accepted from a caller, always computed here.
  */
+function assertValidCorpusProfile(value) {
+  if (value !== undefined && !getCorpusProfile(value)) {
+    throw new AppError("corpusProfile is not a registered profile", 400);
+  }
+}
+
+/**
+ * A profile carries its own default visibility. When the caller does not
+ * choose one, the profile's applies; a caller-supplied value that
+ * contradicts the profile is refused rather than silently overridden.
+ */
+function resolveDefaultVisibility(body) {
+  const profile = getCorpusProfile(body.corpusProfile);
+  if (!profile) return body.defaultVisibility;
+  if (body.defaultVisibility !== undefined && body.defaultVisibility !== profile.defaultVisibility) {
+    throw new AppError(`defaultVisibility must be "${profile.defaultVisibility}" for corpusProfile "${profile.id}"`, 400);
+  }
+  return profile.defaultVisibility;
+}
+
+function assertValidDefaultVisibility(value) {
+  if (value !== undefined && !isValidVisibility(value)) {
+    throw new AppError("defaultVisibility must be one of: guest, staff, restricted", 400);
+  }
+}
+
+/**
+ * The visibility of the chunks that currently exist for each document's own
+ * version, keyed "<documentId>:<version>". One aggregate for the whole batch.
+ */
+async function chunkVisibilitiesFor(documents) {
+  const byDocument = new Map();
+  if (documents.length === 0) return byDocument;
+
+  const rows = await KnowledgeChunk.aggregate([
+    { $match: { documentId: { $in: documents.map((doc) => new mongoose.Types.ObjectId(String(doc._id))) } } },
+    { $group: { _id: { documentId: "$documentId", version: "$version" }, visibilities: { $addToSet: "$visibility" } } },
+  ]);
+  for (const row of rows) byDocument.set(`${row._id.documentId}:${row._id.version}`, row.visibilities);
+  return byDocument;
+}
+
+/**
+ * A document's stored `content` is the whole source text, so it is only as
+ * shareable as the most restricted thing in it: the document's default
+ * visibility (which covers anything not classified individually) or any of
+ * its chunks, whichever is higher. A missing/invalid default counts as
+ * restricted.
+ */
+function effectiveDocumentVisibility(doc, chunkVisibilities = []) {
+  const base = isValidVisibility(doc.defaultVisibility) ? doc.defaultVisibility : "restricted";
+  const invalidChunk = chunkVisibilities.some((level) => !isValidVisibility(level)) ? ["restricted"] : [];
+  return maxVisibility([base, ...invalidChunk, ...chunkVisibilities]);
+}
+
+function withContentVisibility(doc, authorizedLevel, chunkVisibilities) {
+  // A document with a corpusProfile never exposes its raw source text through
+  // the API, at any level: that text still contains everything the profile
+  // withheld from the corpus (held, excluded, and unmapped sections), so
+  // returning it would bypass the corpus boundary. It stays stored in MongoDB;
+  // only its exposure is closed. The approved chunks are read through the
+  // chunk endpoints, which enforce chunk visibility.
+  if (!doc.corpusProfile && canAccess(authorizedLevel, effectiveDocumentVisibility(doc, chunkVisibilities))) return doc;
+  // eslint-disable-next-line no-unused-vars
+  const { content, ...withoutContent } = doc;
+  return { ...withoutContent, contentRedacted: true };
+}
+
+/**
+ * Applies the caller's visibility to ONE already-loaded plain document: the
+ * full `content` is included only if the caller may see everything the
+ * document contains; otherwise it is omitted and `contentRedacted: true` is
+ * set. Used for read responses and for the responses of write endpoints.
+ */
+export async function redactDocumentForLevel(doc, authorizedLevel) {
+  const chunkVisibilities = await chunkVisibilitiesFor([doc]);
+  return withContentVisibility(doc, authorizedLevel, chunkVisibilities.get(`${doc._id}:${doc.version}`) || []);
+}
+
 export function computeContentHash(content) {
   return createHash("sha256").update(content, "utf8").digest("hex");
 }
@@ -190,6 +279,9 @@ export async function createKnowledgeDocument(body) {
   assertValidDate(body.effectiveTo, "effectiveTo");
   assertEffectiveWindowOrdered(body.effectiveFrom, body.effectiveTo);
   assertValidBoolean(body.isTestData, "isTestData");
+  assertValidDefaultVisibility(body.defaultVisibility);
+  assertValidCorpusProfile(body.corpusProfile);
+  const defaultVisibility = resolveDefaultVisibility(body);
   await assertExists(Workspace, workspaceId, "Workspace");
 
   const refs = {
@@ -227,6 +319,8 @@ export async function createKnowledgeDocument(body) {
     contentHash,
     sourceFilename: body.sourceFilename,
     isTestData: body.isTestData,
+    defaultVisibility,
+    corpusProfile: body.corpusProfile,
     status: body.status,
     version,
     effectiveFrom: body.effectiveFrom,
@@ -248,13 +342,16 @@ export async function createKnowledgeDocument(body) {
   return toPlain(document);
 }
 
-export async function listKnowledgeDocuments(query) {
+export async function listKnowledgeDocuments(query, authorizedLevel) {
   const workspaceId = requireObjectId(query.workspaceId, "workspaceId");
   const pagination = parsePagination(query);
   const sort = parseSort(query, ["createdAt", "updatedAt", "title", "version", "effectiveFrom"], {
     createdAt: -1,
   });
-  const filter = { workspaceId };
+  // A document is listed only when the caller may read it at all (its default
+  // visibility is at or below their level); its content is then further
+  // gated by what its chunks contain.
+  const filter = { workspaceId, defaultVisibility: { $in: allowedVisibilities(authorizedLevel) } };
 
   if (query.propertyId) filter.propertyId = parseObjectId(query.propertyId, "propertyId");
   if (query.unitId) filter.unitId = parseObjectId(query.unitId, "unitId");
@@ -264,14 +361,23 @@ export async function listKnowledgeDocuments(query) {
   // (e.g. GET ?ingestionStatus=failed) without a direct MongoDB query.
   if (query.ingestionStatus) filter.ingestionStatus = query.ingestionStatus;
 
-  return paginateQuery(KnowledgeDocument, filter, pagination, sort);
+  const { items, pagination: page } = await paginateQuery(KnowledgeDocument, filter, pagination, sort);
+  const chunkVisibilities = await chunkVisibilitiesFor(items);
+  return {
+    items: items.map((doc) => withContentVisibility(doc, authorizedLevel, chunkVisibilities.get(`${doc._id}:${doc.version}`) || [])),
+    pagination: page,
+  };
 }
 
-export async function getKnowledgeDocumentById(id, workspaceId) {
+export async function getKnowledgeDocumentById(id, workspaceId, authorizedLevel) {
   const scope = requireObjectId(workspaceId, "workspaceId");
-  return toPlain(
-    await findInWorkspaceOr404(KnowledgeDocument, requireObjectId(id), scope, "KnowledgeDocument"),
-  );
+  const document = await findInWorkspaceOr404(KnowledgeDocument, requireObjectId(id), scope, "KnowledgeDocument");
+  // Same 404 as a missing document: a document above the caller's level is
+  // not revealed to exist.
+  if (!canAccess(authorizedLevel, document.defaultVisibility)) {
+    throw new AppError("KnowledgeDocument not found", 404);
+  }
+  return redactDocumentForLevel(toPlain(document), authorizedLevel);
 }
 
 export async function updateKnowledgeDocument(id, body, workspaceId) {
@@ -289,6 +395,9 @@ export async function updateKnowledgeDocument(id, body, workspaceId) {
   }
   if (body?.version !== undefined) {
     throw new AppError("version cannot be changed directly", 400);
+  }
+  if (body?.corpusProfile !== undefined) {
+    throw new AppError("corpusProfile cannot be changed — create a new version instead", 400);
   }
 
   const updates = pickDefined(body, UPDATABLE);
@@ -310,6 +419,7 @@ export async function updateKnowledgeDocument(id, body, workspaceId) {
     updates.effectiveTo ?? document.effectiveTo,
   );
   assertValidBoolean(updates.isTestData, "isTestData");
+  assertValidDefaultVisibility(updates.defaultVisibility);
 
   await validateOptionalRefs(document.workspaceId, {
     propertyId: updates.propertyId ?? document.propertyId,
