@@ -116,6 +116,12 @@ export default function SignUpPage() {
             Sign in
           </Link>
         </p>
+        <aside className="auth-demo-notice" aria-label="Demo notice">
+          <p className="auth-demo-notice-title">Demo Notice</p>
+          <p className="auth-demo-notice-text">
+            Email verification is currently limited because a custom email domain has not been configured. For the best experience, use Continue with Google.
+          </p>
+        </aside>
       </section>
     </main>
   );
