@@ -74,7 +74,7 @@ async function start() {
       }
       for (const problem of mail.warnings) console.warn(`[KOI API] WARNING: email configuration: ${problem}`);
       console.log(`[KOI API] EOI session: access ${auth.config.eoi?.accessTtlSeconds ?? "?"}s, refresh ${auth.config.eoi?.refreshTtlDays ?? "?"} days; email delivery: ${emailDeliveryMode()}`);
-      if (emailDeliveryMode() === "none") console.warn("[KOI API] WARNING: no email transport is configured: email + password sign-up, email verification and password reset answer 503 (set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, MAIL_FROM; see docs/UNIFIED_AUTH_PHASE46.md).");
+      if (emailDeliveryMode() === "none") console.warn("[KOI API] WARNING: no email transport is configured: email + password sign-up, email verification and password reset answer 503 (set KOI_EMAIL_TRANSPORT=resend with RESEND_API_KEY and MAIL_FROM, or SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD and MAIL_FROM; see docs/UNIFIED_AUTH_PHASE46.md).");
       if (emailDeliveryMode() === "smtp") {
         // A connectivity probe, never fatal (a mail-server blip must not stop the API): it reports only reachable/unreachable and an error class.
         const probe = await verifySmtpConnection();

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import { env } from "../config/env.js";
 import { resolveEmailConfig } from "../config/emailConfig.js";
 import { isDevelopmentOrTestMode } from "../config/runtimeMode.js";
@@ -12,11 +13,16 @@ import { isDevelopmentOrTestMode } from "../config/runtimeMode.js";
  * and never see Nodemailer, SMTP or a credential:
  *
  *   passwordAuthService -> emailService.sendEmail -> Nodemailer SMTP transport -> SMTP server -> recipient
+ *                                                  -> Resend HTTPS API transport -> Resend -> recipient
  *
  *   smtp        (KOI_EMAIL_TRANSPORT=smtp, or implied by SMTP_HOST) Nodemailer. Port 465 = TLS from the first byte; 587 = a plain connection that MUST upgrade with
  *               STARTTLS (`requireTLS`: no silent downgrade to plaintext). Server certificates are ALWAYS verified: this file contains no `rejectUnauthorized`
  *               override and no setting can add one. The SMTP password lives only in the process environment; it is handed to Nodemailer once and never logged,
  *               returned or placed in an error.
+ *   resend      (KOI_EMAIL_TRANSPORT=resend) the official `resend` SDK over HTTPS (port 443), for hosts that block outbound SMTP (Render Free blocks 25/465/587). No SMTP
+ *               connection is ever opened in this mode. RESEND_API_KEY lives only in the process environment: it is handed to the SDK once and never logged,
+ *               returned or placed in an error. The SDK reports API failures as a value, not an exception; they are converted to a thrown error carrying only an
+ *               allow-listed class, the HTTP status and a REDACTED short detail (no address, URL or key), so the shared failure path below behaves the same.
  *   dev outbox  (KOI_EMAIL_TRANSPORT=outbox) DEVELOPMENT / TEST ONLY, refused in production and in an unknown NODE_ENV: each message is appended as one JSON line
  *               to backend/.dev-outbox/outbox.jsonl (git-ignored) so a developer or test can open the link. Nothing is sent. It is never a fallback: it only
  *               exists when explicitly requested, and `resolveEmailConfig` turns it off outside development/test.
@@ -28,6 +34,13 @@ import { isDevelopmentOrTestMode } from "../config/runtimeMode.js";
  */
 let injected = null;
 let smtpCache = null; // { key, transporter }
+let resendCache = null; // { key, client }
+let resendTimeoutMs = 15_000; // an unanswered HTTPS call must not hold a sign-up request open (the SMTP transport has 10 s connect / 20 s socket limits)
+
+/** Test helper: shorten the Resend call timeout. */
+export function setResendTimeoutForTests(ms) {
+  resendTimeoutMs = Number.isInteger(ms) && ms > 0 ? ms : 15_000;
+}
 
 export function setEmailTransport(fn) {
   if (fn !== null && typeof fn !== "function") throw new TypeError("An email transport must be a function");
@@ -38,6 +51,7 @@ export function setEmailTransport(fn) {
 export function resetEmailTransport() {
   try { smtpCache?.transporter.close(); } catch { /* nothing to close */ }
   smtpCache = null;
+  resendCache = null;
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -80,7 +94,46 @@ function smtpTransporter(smtp) {
   return transporter;
 }
 
-/** @returns {{ kind: "injected"|"smtp"|"dev-outbox", send: Function, smtp?: object } | null} */
+function resendClient(apiKey) {
+  const key = crypto.createHash("sha256").update(apiKey).digest("hex");
+  if (resendCache?.key === key) return resendCache.client;
+  resendCache = { key, client: new Resend(apiKey) };
+  return resendCache.client;
+}
+
+/** "Name <address>" for the API; a display name with punctuation is quoted so a comma or dot cannot be read as an address separator. */
+const formatFrom = ({ display, address }) => (display ? (/[,.;:()@[\]\\]/.test(display) ? `"${display}" <${address}>` : `${display} <${address}>`) : address);
+
+/** A short provider message that is safe for a log line: no address, URL, key or long token, one line, capped. */
+const redactDetail = (message) =>
+  String(message ?? "")
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[address]")
+    .replace(/https?:\/\/\S+/gi, "[url]")
+    .replace(/\bre_[A-Za-z0-9_-]+/g, "[key]")
+    .replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+
+/** The SDK returns { data, error } instead of throwing: turn `error` into an Error whose code/status/detail are all safe to log. */
+function resendFailure(apiError) {
+  const failure = new Error("Resend API error");
+  const name = String(apiError?.name ?? "").toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+  failure.code = /^[A-Z][A-Z0-9_]{2,30}$/.test(name) ? name : "RESEND_ERROR";
+  if (Number.isInteger(apiError?.statusCode)) failure.status = apiError.statusCode;
+  failure.detail = redactDetail(apiError?.message);
+  return failure;
+}
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error("Resend request timed out"), { code: "ETIMEDOUT" })), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** @returns {{ kind: "injected"|"smtp"|"resend"|"dev-outbox", send: Function, smtp?: object } | null} */
 function activeTransport() {
   if (injected) return { kind: "injected", send: injected };
   const config = resolveEmailConfig();
@@ -95,6 +148,16 @@ function activeTransport() {
       },
     };
   }
+  if (config.transport === "resend" && config.resend) {
+    const resend = config.resend;
+    return {
+      kind: "resend",
+      send: async ({ to, subject, text, html }) => {
+        const result = await withTimeout(resendClient(resend.apiKey).emails.send({ from: formatFrom(resend.from), to: [to], subject, text, html }), resendTimeoutMs);
+        if (result?.error) throw resendFailure(result.error);
+      },
+    };
+  }
   if (config.transport === "outbox") return { kind: "dev-outbox", send: outboxTransport() };
   return null;
 }
@@ -102,7 +165,7 @@ function activeTransport() {
 /** True when a message can really be delivered (a valid transport is configured). Never true for a half-configured SMTP setup. */
 export const emailAvailable = () => activeTransport() !== null;
 
-/** Which delivery is active: "transport" (injected) | "smtp" | "dev-outbox" | "none" (for start-up logs and tests; contains no secret). */
+/** Which delivery is active: "transport" (injected) | "smtp" | "resend" | "dev-outbox" | "none" (for start-up logs and tests; contains no secret). */
 export function emailDeliveryMode() {
   const active = activeTransport();
   if (!active) return "none";
@@ -128,7 +191,9 @@ export async function sendEmail({ to, subject, text, html, kind, link }) {
     await active.send({ to, subject, text, html, kind, link });
     return true;
   } catch (error) {
-    console.warn(`[KOI API] email delivery failed (${kind ?? "message"}, transport ${active.kind}, class ${safeClass(error)})`);
+    const status = Number.isInteger(error?.status) ? `, status ${error.status}` : "";
+    const detail = typeof error?.detail === "string" && error.detail ? `, detail: ${error.detail}` : "";
+    console.warn(`[KOI API] email delivery failed (${kind ?? "message"}, transport ${active.kind}, class ${safeClass(error)}${status}${detail})`);
     return false;
   }
 }

@@ -23,7 +23,8 @@
     "multer": "^2.4.0",
     "nodemailer": "^10.0.15",
     "openai": "^6.49.0",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "resend": "^6.33.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
