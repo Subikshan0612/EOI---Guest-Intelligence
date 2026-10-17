@@ -2,8 +2,10 @@
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   grid-template-rows: var(--header-height) minmax(0, 1fr);
-  min-height: 100vh;
-  min-height: 100dvh;
+  /* ONE viewport tall, never taller: the page itself does not scroll. The sidebar (row 2, column 1) is anchored, and .main-workspace (row 2, column 2) is the only
+   * vertical scroll container. (This was min-height, which let the grid grow with its content and scroll the whole document, sidebar included.) */
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--color-bg);
 }
@@ -127,6 +129,7 @@
 .app-sidebar {
   grid-column: 1;
   grid-row: 2;
+  overflow: hidden;
   border-right: var(--border-width) solid var(--color-border);
 }
 
@@ -150,6 +153,12 @@
   gap: var(--space-4);
   min-width: 0;
   color: inherit;
+}
+
+.sidebar-brand-copy:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-md);
 }
 
 .sidebar-brand-title {
@@ -214,14 +223,46 @@
 
 .nav-link,
 .conversation-link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-10, var(--space-12));
-  min-height: 2.25rem;
+  min-height: 2.5rem;
   padding: var(--space-8) var(--space-12);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   transition: background var(--ease), color var(--ease);
+}
+
+/* The selected-page indicator: a slim accent bar that grows in from the middle. */
+.nav-link::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55rem;
+  bottom: 0.55rem;
+  width: 3px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  transform: scaleY(0);
+  transition: transform var(--duration) var(--ease-out);
+}
+
+.nav-link.active::before {
+  transform: scaleY(1);
+}
+
+.nav-link svg {
+  transition: color var(--ease), transform var(--duration) var(--ease-out);
+}
+
+.nav-link:hover svg {
+  transform: translateX(1px);
+}
+
+.nav-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .nav-link svg,
@@ -394,9 +435,18 @@
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
-  overflow: auto;
-  padding: var(--space-40) var(--space-32);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+  padding: var(--space-40) var(--space-40) var(--space-64);
   background: var(--color-bg);
+}
+
+.main-workspace:focus {
+  outline: none;
 }
 
 .main-workspace:has(.page-empty) {

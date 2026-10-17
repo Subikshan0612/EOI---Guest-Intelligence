@@ -3,10 +3,25 @@
  */
 .auth-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: var(--space-24) var(--space-16);
-  background: var(--color-bg);
+  padding: var(--space-32) var(--space-16);
+  /* A restrained wash of the existing sage accent at the top of the page: depth without a new colour. */
+  background:
+    radial-gradient(60rem 28rem at 50% -8rem, var(--color-accent-soft), transparent 70%),
+    var(--color-bg);
+}
+
+@keyframes auth-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .auth-card {
@@ -15,6 +30,10 @@
   display: grid;
   gap: var(--space-12);
   justify-items: start;
+  padding: var(--space-32);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  animation: auth-card-in 280ms var(--ease-out) both;
 }
 
 /* The heading takes programmatic focus so a screen reader announces the screen; it is not interactive, so it shows no focus ring. */
@@ -29,12 +48,33 @@
 }
 
 .auth-brand {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-8);
   font-family: var(--font-display);
   font-size: 1.45rem;
   font-weight: var(--font-weight-bold);
   letter-spacing: 0.06em;
+  line-height: 1;
   color: var(--color-text);
+}
+
+.auth-brand::after {
+  content: "Enterprise Operational Intelligence";
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+}
+
+.auth-card .page-title {
+  font-size: var(--font-size-2xl);
+}
+
+.auth-card .page-lead {
+  line-height: var(--line-snug);
 }
 
 .session-notice {
@@ -121,9 +161,10 @@
 /* Account setup (Phase 45C): the one-field onboarding form and the sign-in / create-account switch. */
 .auth-form {
   display: grid;
-  gap: var(--space-8);
+  gap: var(--space-16);
   width: 100%;
   justify-items: start;
+  margin-top: var(--space-8);
 }
 
 .auth-label {
@@ -134,7 +175,7 @@
 
 .auth-input {
   width: 100%;
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   padding: var(--space-8) var(--space-12);
   border: var(--border-width) solid var(--color-border-strong);
   border-radius: var(--radius-md);
@@ -187,20 +228,28 @@
 
 .auth-reveal {
   flex: 0 0 auto;
-  min-width: 3.5rem;
-  min-height: 2.5rem;
-  padding: 0 var(--space-12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0;
   border: var(--border-width) solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-elevated);
   color: var(--color-text-secondary);
-  font: inherit;
-  font-size: var(--font-size-sm);
   cursor: pointer;
+  transition: color var(--ease), border-color var(--ease), background var(--ease);
 }
 
 .auth-reveal:hover {
-  color: var(--color-text);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.auth-reveal[aria-pressed="true"] {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
 }
 
 .auth-reveal:focus-visible,
@@ -215,8 +264,34 @@
 .auth-card > .primary-button,
 .auth-google {
   width: 100%;
-  min-height: 2.75rem;
+  min-height: 2.875rem;
   justify-content: center;
+}
+
+.auth-card .auth-google {
+  /* Same height as the primary action (the later .secondary-button rule would otherwise win on specificity). */
+  min-height: 2.875rem;
+  gap: var(--space-12);
+}
+
+.auth-google-mark {
+  flex-shrink: 0;
+}
+
+/* Errors inside a form read as a calm, contained message (and arrive with the shared alert-in motion from polish.css). */
+.auth-form .op-form-error,
+.auth-card > .op-form-error {
+  width: 100%;
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-width) solid color-mix(in srgb, var(--color-danger) 28%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+}
+
+.auth-field .op-form-error {
+  padding: 0;
+  border: 0;
+  background: none;
 }
 
 .secondary-button {
@@ -251,10 +326,19 @@
   align-items: center;
   min-height: 2.75rem;
   border-radius: var(--radius-md);
+  transition: color var(--ease);
 }
 
 .auth-link:hover {
   text-decoration: underline;
+}
+
+.auth-forgot {
+  /* Sits with the password field it belongs to, not after the primary action. */
+  justify-self: end;
+  margin-top: calc(-1 * var(--space-8));
+  min-height: 2rem;
+  font-size: var(--font-size-sm);
 }
 
 .auth-button-link {
@@ -285,8 +369,9 @@
 .auth-demo-notice {
   width: 100%;
   margin-top: var(--space-4);
-  padding: var(--space-12);
+  padding: var(--space-12) var(--space-16);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent-gold);
   border-radius: var(--radius-md);
   background: var(--color-surface);
 }

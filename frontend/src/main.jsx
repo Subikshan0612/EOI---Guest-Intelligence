@@ -11,6 +11,7 @@ import "./styles/operations.css";
 import "./styles/dashboard.css";
 import "./styles/auth.css";
 import "./styles/assistant.css";
+import "./styles/polish.css";
 
 // Real sign-in (OIDC, Authorization Code + PKCE) when VITE_OIDC_* is configured. Not configured: development keeps its dev token; a production
 // build shows "Authentication is not configured" instead of an unauthenticated app. The app renders once sign-in has settled; until then (a

@@ -99,5 +99,8 @@
   --duration-fast: 120ms;
   --duration: 180ms;
   --ease: 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-enter: 240ms;
+  --shadow-raise: 0 4px 14px rgb(42 38 31 / 0.08);
   --focus-ring: 0 0 0 3px rgb(63 92 81 / 0.28);
 }

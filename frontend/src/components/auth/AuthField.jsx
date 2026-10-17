@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 
 /**
@@ -33,7 +34,7 @@ export default function AuthField({ id, label, type = "text", value, onChange, e
         />
         {isPassword ? (
           <button type="button" className="auth-reveal" onClick={() => setShown((v) => !v)} aria-pressed={shown} aria-label={shown ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}>
-            {shown ? "Hide" : "Show"}
+            {shown ? <EyeOff size={18} strokeWidth={1.75} aria-hidden="true" /> : <Eye size={18} strokeWidth={1.75} aria-hidden="true" />}
           </button>
         ) : null}
       </div>

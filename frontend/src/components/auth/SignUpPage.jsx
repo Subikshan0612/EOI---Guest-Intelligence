@@ -95,6 +95,7 @@ export default function SignUpPage() {
         <h1 className="page-title" id="signup-title" ref={heading} tabIndex={-1}>
           Create your EOI account
         </h1>
+        <p className="page-lead">Set up your account to continue to EOI.</p>
         <form className="auth-form" onSubmit={submit} noValidate aria-busy={busy ? "true" : undefined}>
           <AuthField id="signup-name" label="Full name" value={form.name} onChange={set("name")} error={errors.name} autoComplete="name" disabled={busy} inputRef={refs.name} maxLength={120} />
           <AuthField id="signup-email" label="Email" type="email" value={form.email} onChange={set("email")} error={errors.email} autoComplete="email" inputMode="email" disabled={busy} inputRef={refs.email} maxLength={254} />

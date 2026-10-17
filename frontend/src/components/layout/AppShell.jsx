@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Outlet } from "react-router-dom";
 import { useLayout } from "../../hooks/useLayout";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -7,10 +7,23 @@ import SessionNotice from "../auth/SessionNotice";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 
+/**
+ * The page a path shows, with record ids folded away: moving between two conversations (or two guests) is the SAME page, so it neither replays the entrance nor resets
+ * the scroll position; moving to another page does.
+ */
+const pageKey = (pathname) => pathname.replace(/\/[0-9a-f]{24}(?=\/|$)/gi, "/:id").replace(/^(\/assistant)(\/.*)?$/, "$1");
+
 export default function AppShell() {
   const { pathname, sidebarOpen, closeOverlays } = useLayout();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const overlayVisible = isMobile && sidebarOpen;
+  const mainRef = useRef(null);
+  const page = pageKey(pathname);
+
+  // The main area is the scroll container: a new page opens at its top (the document itself never scrolls).
+  useEffect(() => {
+    mainRef.current?.scrollTo?.({ top: 0 });
+  }, [page]);
 
   useEffect(() => {
     if (!overlayVisible) return undefined;
@@ -40,10 +53,12 @@ export default function AppShell() {
       <div className="app-shell">
         <Header />
         <Sidebar />
-        <main id="main-workspace" className="main-workspace" tabIndex={-1}>
-          <DevProfileNotice />
-          <SessionNotice />
-          <Outlet />
+        <main id="main-workspace" ref={mainRef} className="main-workspace" tabIndex={-1}>
+          <div className="route-view" key={page}>
+            <DevProfileNotice />
+            <SessionNotice />
+            <Outlet />
+          </div>
         </main>
       </div>
       {overlayVisible ? (

@@ -82,6 +82,9 @@ export default function SignInPage() {
         <form className="auth-form" onSubmit={submit} noValidate aria-busy={busy ? "true" : undefined}>
           <AuthField id="signin-email" label="Email" type="email" value={email} onChange={setEmail} error={errors.email} autoComplete="username" inputMode="email" disabled={busy} inputRef={emailRef} maxLength={254} />
           <AuthField id="signin-password" label="Password" type="password" value={password} onChange={setPassword} error={errors.password} autoComplete="current-password" disabled={busy} inputRef={passwordRef} maxLength={200} />
+          <Link className="auth-link auth-forgot" to="/forgot-password">
+            Forgot password?
+          </Link>
           {formError ? (
             <p className="op-form-error" role="alert">
               {formError}
@@ -101,9 +104,6 @@ export default function SignInPage() {
           <button type="submit" className="primary-button" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
-          <Link className="auth-link" to="/forgot-password">
-            Forgot password?
-          </Link>
         </form>
         <GoogleButton />
         <p className="muted auth-note">

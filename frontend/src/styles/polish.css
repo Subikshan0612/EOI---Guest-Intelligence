@@ -1,0 +1,433 @@
+/*
+ * Cross-cutting polish (UI/UX modernization pass). Loaded LAST, built only on the existing tokens (tokens.css): same colours, same typography, same radii. It refines
+ * interaction states, the page entrance, forms, cards, lists, alerts and loading placeholders; it introduces no new palette and no animation library.
+ *
+ * Motion rules: motion states what happened (a page arrived, something appeared, a control was pressed) and is short (<= 260ms). Nothing loops except the loading
+ * spinner / skeleton, and every animation and transition is switched off by the prefers-reduced-motion rule in global.css (and again at the end of this file).
+ */
+
+/* ---- page entrance -------------------------------------------------------------------------------------------------- */
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.route-view {
+  animation: route-enter var(--duration-enter) var(--ease-out) both;
+}
+
+/* A thin, quiet scrollbar for the one scroll container (WebKit/Blink; Firefox uses scrollbar-width in layout.css). */
+.main-workspace::-webkit-scrollbar {
+  width: 10px;
+}
+
+.main-workspace::-webkit-scrollbar-thumb {
+  border: 3px solid var(--color-bg);
+  border-radius: var(--radius-full);
+  background: var(--color-border-strong);
+}
+
+.main-workspace::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- header ---------------------------------------------------------------------------------------------------------- */
+.app-header {
+  box-shadow: var(--shadow-sm);
+}
+
+.header-title {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ---- page headings --------------------------------------------------------------------------------------------------- */
+.op-page-header .page-title,
+.page > header .page-title {
+  text-wrap: balance;
+}
+
+.page-lead {
+  line-height: var(--line-body);
+}
+
+/* ---- buttons --------------------------------------------------------------------------------------------------------- */
+.primary-button,
+.secondary-button,
+.text-button,
+.icon-button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.primary-button {
+  transition: background var(--ease), box-shadow var(--ease), transform var(--duration-fast) var(--ease-out);
+}
+
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.icon-button:focus-visible,
+.text-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.primary-button:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.text-button:focus-visible {
+  border-radius: var(--radius-sm);
+}
+
+.secondary-button {
+  transition: background var(--ease), border-color var(--ease), transform var(--duration-fast) var(--ease-out);
+}
+
+.secondary-button:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+@media (hover: hover) {
+  .primary-button:hover:not(:disabled) {
+    box-shadow: var(--shadow-raise);
+  }
+
+  .secondary-button:hover:not(:disabled) {
+    border-color: var(--color-accent);
+  }
+}
+
+/* A control that is waiting shows a small spinner; the label stays (and is announced) as it was. */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+[aria-busy="true"] button[type="submit"]::before {
+  content: "";
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
+  margin-right: var(--space-8);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--radius-full);
+  animation: spin 700ms linear infinite;
+}
+
+/* ---- inputs / selects ------------------------------------------------------------------------------------------------ */
+.op-field-input,
+.auth-input {
+  transition: border-color var(--ease), box-shadow var(--ease), background var(--ease);
+}
+
+.op-field-input:hover:not(:focus):not(:disabled),
+.auth-input:hover:not(:focus):not(:read-only) {
+  border-color: var(--color-text-muted);
+}
+
+.op-field-input:focus,
+.auth-input:focus {
+  border-color: var(--color-accent);
+}
+
+.auth-input[aria-invalid="true"],
+.auth-input[aria-invalid="true"]:focus {
+  border-color: var(--color-danger);
+}
+
+.auth-input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px rgb(166 69 61 / 0.2);
+}
+
+.op-field-input:disabled {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.op-field-input::placeholder,
+.auth-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.8;
+}
+
+select.op-field-input {
+  cursor: pointer;
+}
+
+/* ---- cards / lists / badges ------------------------------------------------------------------------------------------ */
+.koi-card {
+  border-radius: var(--radius-lg);
+}
+
+.op-list-link,
+.prompt-item,
+.conversation-teaser,
+.asst-recent-link {
+  transition: border-color var(--ease), background var(--ease), box-shadow var(--ease), transform var(--duration) var(--ease-out);
+}
+
+.op-list-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (hover: hover) {
+  .op-list-link:hover {
+    box-shadow: var(--shadow-raise);
+    transform: translateY(-1px);
+  }
+}
+
+.status-chip,
+.risk-chip,
+.severity-chip,
+.category-chip {
+  line-height: 1.5;
+}
+
+/* ---- alerts --------------------------------------------------------------------------------------------------------- */
+@keyframes alert-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.op-form-error {
+  animation: alert-in var(--duration) var(--ease-out) both;
+}
+
+/* ---- loading placeholders -------------------------------------------------------------------------------------------- */
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.skeleton {
+  display: block;
+  height: 2.5rem;
+  border-radius: var(--radius-md);
+  background: var(--color-border);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---- overview (Home) ------------------------------------------------------------------------------------------------- */
+.home-page {
+  max-width: 60rem;
+  gap: var(--space-32);
+}
+
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  max-width: 44rem;
+}
+
+.home-hero .page-title {
+  font-size: var(--font-size-3xl);
+}
+
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-actions .primary-button {
+  min-height: 2.75rem;
+  padding: 0 var(--space-20);
+}
+
+.home-actions .primary-button svg {
+  transition: transform var(--duration) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .home-actions .primary-button:hover svg {
+    transform: translateX(3px);
+  }
+}
+
+.home-actions .suggestion-chip {
+  min-height: 2.75rem;
+  padding: 0 var(--space-16);
+  gap: var(--space-8);
+}
+
+.home-section-label {
+  margin-bottom: var(--space-12);
+}
+
+.home-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: home-step;
+}
+
+.home-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  counter-increment: home-step;
+}
+
+.home-step::before {
+  content: counter(home-step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.home-step-label {
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.home-step-text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-body);
+}
+
+.home-recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-recent-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-height: 2.5rem;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  transition: background var(--ease), color var(--ease);
+}
+
+.home-recent-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-recent-link svg {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.home-recent-link:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.home-recent-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (max-width: 768px) {
+  .home-steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-hero .page-title {
+    font-size: var(--font-size-2xl);
+  }
+
+  .home-actions .primary-button,
+  .home-actions .suggestion-chip {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+/* ---- Assistant: the sticky composer sits flush at the bottom of the scroll container (no bottom padding for content to show through) ---------------------------- */
+.main-workspace:has(.asst-composer) {
+  padding-bottom: 0;
+}
+
+.asst-composer {
+  padding-bottom: var(--space-16);
+}
+
+/* ---- narrower content area ------------------------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .main-workspace {
+    padding: var(--space-24) var(--space-16) var(--space-48);
+  }
+}
+
+/* ---- reduced motion: no animation, no transition, no transform tricks ----------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .route-view,
+  .op-form-error,
+  .skeleton {
+    animation: none !important;
+  }
+
+  .primary-button:active:not(:disabled),
+  .secondary-button:active:not(:disabled),
+  .op-list-link:hover,
+  .nav-link:hover svg {
+    transform: none !important;
+  }
+
+  [aria-busy="true"] button[type="submit"]::before {
+    animation: none !important;
+    border-right-color: currentColor;
+  }
+}
