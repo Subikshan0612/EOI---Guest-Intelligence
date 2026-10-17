@@ -12,6 +12,7 @@ export default function GuestsPage() {
   const { guests, status, error, reload, createGuest } = useGuests(propertyFilter);
   const { properties } = useWorkspaceProperties();
   const [showCreate, setShowCreate] = useState(false);
+  const [created, setCreated] = useState(null);
   const propertyName = (id) => properties.find((property) => property.id === id)?.name ?? null;
 
   if (status === "unconfigured") {
@@ -42,7 +43,10 @@ export default function GuestsPage() {
         <button
           type="button"
           className="primary-button"
-          onClick={() => setShowCreate((open) => !open)}
+          onClick={() => {
+            setShowCreate((open) => !open);
+            setCreated(null);
+          }}
         >
           <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
           Add guest
@@ -53,15 +57,27 @@ export default function GuestsPage() {
         <section className="koi-card">
           <h2 className="card-label">New guest</h2>
           <GuestForm
+            withStay
             submitLabel="Create guest"
             defaultPropertyId={propertyFilter}
             onCancel={() => setShowCreate(false)}
             onSubmit={async (values) => {
-              await createGuest(values);
+              const guest = await createGuest(values);
+              setCreated(guest);
               setShowCreate(false);
             }}
           />
         </section>
+      ) : null}
+
+      {created ? (
+        <p className="muted" role="status">
+          Added {formatGuestName(created)}
+          {created.stay ? ` with stay ${created.stay.reservationId || "(no booking reference)"}` : ""}.{" "}
+          <Link to={`/operations/guests/${created.id}`} className="text-button">
+            View guest
+          </Link>
+        </p>
       ) : null}
 
       <div className="op-form-row">

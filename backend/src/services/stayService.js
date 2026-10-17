@@ -37,6 +37,20 @@ const UPDATABLE = [
  */
 const OCCUPYING_STAY_STATUSES = ["reserved", "confirmed", "checked_in"];
 
+/**
+ * A stay's unit must be a unit of the stay's own property. A Unit of ANOTHER workspace is indistinguishable from a missing one (Phase 21); only after proving the Unit belongs
+ * to this workspace's own Property structure may a same-workspace mismatch be reported as a 400.
+ */
+async function assertUnitInProperty({ workspaceId, propertyId, unitId }) {
+  if (!unitId) return;
+  const unit = await findByIdOr404(Unit, unitId, "Unit");
+  const unitProperty = await Property.findOne({ _id: unit.propertyId, workspaceId });
+  if (!unitProperty) throw new AppError("Unit not found", 404);
+  if (String(unit.propertyId) !== String(propertyId)) {
+    throw new AppError("Unit does not belong to the given property", 400);
+  }
+}
+
 async function validateStayRefs({ workspaceId, guestId, propertyId, unitId }) {
   const [guest, property] = await Promise.all([
     findByIdOr404(Guest, guestId, "Guest"),
@@ -48,16 +62,7 @@ async function validateStayRefs({ workspaceId, guestId, propertyId, unitId }) {
   // Workspace -> Property -> Guest -> Stay: a stay's guest belongs to the stay's own property (never another property's guest, never one with no property).
   assertGuestInProperty(guest, propertyId);
 
-  if (unitId) {
-    const unit = await findByIdOr404(Unit, unitId, "Unit");
-    // A Unit of ANOTHER workspace is indistinguishable from a missing one (Phase 21); only after proving the Unit belongs to this
-    // workspace's own Property structure may a same-workspace mismatch be reported as a 400.
-    const unitProperty = await Property.findOne({ _id: unit.propertyId, workspaceId });
-    if (!unitProperty) throw new AppError("Unit not found", 404);
-    if (String(unit.propertyId) !== String(propertyId)) {
-      throw new AppError("Unit does not belong to the given property", 400);
-    }
-  }
+  await assertUnitInProperty({ workspaceId, propertyId, unitId });
 }
 
 /**
@@ -118,6 +123,16 @@ async function assertNoOverlap({ workspaceId, unitId, checkIn, checkOut, status,
   if (conflict) {
     throw new AppError("This unit already has an overlapping stay for the selected dates", 409);
   }
+}
+
+/**
+ * Everything about a stay that does not need its guest to exist yet: the dates, the unit (of this property, in this workspace) and the unit's calendar. Used to refuse a
+ * combined guest + stay request BEFORE the guest is written; createStay still validates the full set again.
+ */
+export async function assertStayPlacement({ workspaceId, propertyId, unitId, checkIn, checkOut, status }) {
+  assertValidDateRange(checkIn, checkOut);
+  await assertUnitInProperty({ workspaceId, propertyId, unitId });
+  await assertNoOverlap({ workspaceId, unitId, checkIn, checkOut, status: status || "reserved" });
 }
 
 export async function createStay(body) {

@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { KOI_WORKSPACE_ID } from "../../config/workspace";
-import * as koiApi from "../../services/api";
-import { STAY_STATUSES, formatStatusLabel, mapUnitFromApi, toDateInputValue } from "./operationsMapping";
+import { useState } from "react";
+import StayFields from "./StayFields";
+import { toDateInputValue } from "./operationsMapping";
+import { useUnitsForProperty } from "./useUnitsForProperty";
 
 /**
  * Create/edit form for a Stay, embedded in GuestDetailPage. A stay belongs to a Property AND to a Guest OF THAT PROPERTY (Workspace -> Property -> Guest -> Stay), so both are
@@ -19,38 +19,12 @@ export default function StayForm({ guestName, propertyId, propertyName, initialV
     status: initialValues?.status ?? "reserved",
   });
 
-  const [units, setUnits] = useState([]);
-  const [unitsStatus, setUnitsStatus] = useState(fixedPropertyId ? "loading" : "idle");
+  const { status: unitsStatus, units, error: unitsError } = useUnitsForProperty(fixedPropertyId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (!fixedPropertyId) {
-      setUnits([]);
-      setUnitsStatus("idle");
-      return undefined;
-    }
-    let cancelled = false;
-    setUnitsStatus("loading");
-    koiApi
-      .listUnits(KOI_WORKSPACE_ID, { propertyId: fixedPropertyId, limit: 100, sort: "unitNumber" })
-      .then(({ items }) => {
-        if (cancelled) return;
-        setUnits(items.map(mapUnitFromApi));
-        setUnitsStatus("ready");
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err.message || "Could not load units for this property.");
-        setUnitsStatus("error");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [fixedPropertyId]);
-
-  function set(field) {
-    return (event) => setValues((current) => ({ ...current, [field]: event.target.value }));
+  function setField(field, value) {
+    setValues((current) => ({ ...current, [field]: value }));
   }
 
   async function handleSubmit(event) {
@@ -98,48 +72,11 @@ export default function StayForm({ guestName, propertyId, propertyName, initialV
         </p>
       ) : null}
 
-      <div className="op-form-row">
-        <label className="op-field">
-          <span className="op-field-label">Unit</span>
-          <select className="op-field-input" value={values.unitId} onChange={set("unitId")} disabled={!fixedPropertyId || unitsStatus === "loading"}>
-            <option value="">{unitsStatus === "loading" ? "Loading units…" : "Unassigned"}</option>
-            {units.map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {unit.unitNumber}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="op-field">
-          <span className="op-field-label">Booking reference</span>
-          <input className="op-field-input" value={values.reservationId} onChange={set("reservationId")} placeholder="HR-204-001" maxLength={80} />
-        </label>
-      </div>
+      <StayFields values={values} onChange={setField} units={units} unitsStatus={fixedPropertyId ? unitsStatus : "idle"} />
 
-      <div className="op-form-row">
-        <label className="op-field op-field-narrow">
-          <span className="op-field-label">Check-in</span>
-          <input className="op-field-input" type="date" value={values.checkIn} onChange={set("checkIn")} />
-        </label>
-        <label className="op-field op-field-narrow">
-          <span className="op-field-label">Check-out</span>
-          <input className="op-field-input" type="date" value={values.checkOut} onChange={set("checkOut")} />
-        </label>
-        <label className="op-field op-field-narrow">
-          <span className="op-field-label">Status</span>
-          <select className="op-field-input" value={values.status} onChange={set("status")}>
-            {STAY_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {formatStatusLabel(status)}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {error ? (
+      {error || unitsError ? (
         <p className="op-form-error" role="alert">
-          {error}
+          {error || unitsError}
         </p>
       ) : null}
 

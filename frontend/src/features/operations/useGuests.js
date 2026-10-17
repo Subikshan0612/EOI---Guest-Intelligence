@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { KOI_WORKSPACE_ID, isWorkspaceConfigured } from "../../config/workspace";
 import * as koiApi from "../../services/api";
-import { mapGuestFromApi } from "./operationsMapping";
+import { mapGuestFromApi, mapStayFromApi } from "./operationsMapping";
 
 /**
  * Guest list state for the Operations area. Same shape as `useProperties` —
@@ -44,6 +44,8 @@ export function useGuests(propertyId = "") {
   const createGuest = useCallback(async (input) => {
     const created = await koiApi.createGuest({ workspaceId: KOI_WORKSPACE_ID, ...input });
     const guest = mapGuestFromApi(created);
+    // A guest created together with its first stay (POST /guests with `stay`) comes back with that stay.
+    if (created.stay) guest.stay = mapStayFromApi(created.stay);
     // The list shows one property's guests when a property is selected: a guest of another property is not appended to it.
     if (!propertyId || guest.propertyId === propertyId) {
       setGuests((current) =>
