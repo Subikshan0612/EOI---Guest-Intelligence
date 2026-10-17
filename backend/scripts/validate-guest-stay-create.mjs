@@ -45,7 +45,7 @@ process.env.MONGODB_URI = baseUri.replace(/(mongodb:\/\/[^/]+\/)([^?]*)/, `$1${D
 const { createActor } = await import("./lib/authFixtures.mjs");
 const mongoose = (await import("mongoose")).default;
 const { connectDatabase } = await import("../src/config/database.js");
-const { Workspace, Guest, Stay, Signal, Conversation } = await import("../src/models/index.js");
+const { Workspace, Guest, Stay, Signal, Conversation, Unit } = await import("../src/models/index.js");
 await connectDatabase();
 if (mongoose.connection.db.databaseName !== DB_NAME) {
   console.error("refusing: not connected to the isolated database");
@@ -208,7 +208,7 @@ try {
   check("T24 [UI] with no property chosen the form shows the Property select only - no guest fields, no Stay Details", /Property/.test(noProperty$) && !/First name/.test(noProperty$) && !/Stay details/.test(noProperty$) && !/Booking reference/.test(noProperty$));
   const withProperty$ = renderToString(React.createElement(guestForm, { withStay: true, defaultPropertyId: "p1", submitLabel: "Create guest", onSubmit: async () => {} }));
   check("T25 [UI] once a property is chosen the Guest fields (name, email, phone) and the Stay Details appear: Booking reference, Unit / Room, Check-in, Check-out, Status", ["First name", "Last name", "Email", "Phone", "Stay details", "Booking reference", "Unit / Room", "Check-in", "Check-out", "Status"].every((label) => withProperty$.includes(label)));
-  check("T26 [UI] the unit select waits for the chosen property's units ('Loading units…'), the stay statuses are offered, and the stay is optional ('Add a stay now')", /Loading units/.test(withProperty$) && /Checked in/i.test(withProperty$) && /Add a stay now/.test(withProperty$));
+  check("T26 [UI] the room is a TEXT input (placeholder with examples 204, B1, A-12), not a dropdown, with no 'Unassigned' option and no 'Loading units' state; the stay statuses are offered and the stay is optional ('Add a stay now')", /<input[^>]*placeholder="e\.g\. 204, B1, A-12/.test(withProperty$) && !/Unassigned/.test(withProperty$) && !/Loading units/.test(withProperty$) && (withProperty$.match(/<select/g) ?? []).length === 2 && /Checked in/i.test(withProperty$) && /Add a stay now/.test(withProperty$));
   const stayFields = (await vite.ssrLoadModule("/src/features/operations/StayFields.jsx")).default;
   const sfReady$ = renderToString(React.createElement(stayFields, { values: { unitId: "u204", reservationId: "HR-204-001", checkIn: "2026-10-16", checkOut: "2026-10-19", status: "checked_in" }, onChange() {}, units: [{ id: "u204", unitNumber: "204" }, { id: "u205", unitNumber: "205" }], unitsStatus: "ready", unitLabel: "Unit / Room" }));
   check("T26b [UI] with the property's units loaded the selector offers them by room number (204, 205) plus 'Unassigned', selects 204, and the booking reference and dates are filled", /<option value="u204" selected="">204<\/option>/.test(sfReady$) && />205</.test(sfReady$) && /Unassigned/.test(sfReady$) && /value="HR-204-001"/.test(sfReady$) && /value="2026-10-16"/.test(sfReady$) && /value="2026-10-19"/.test(sfReady$));
@@ -219,13 +219,66 @@ try {
   check("T28 [UI] the existing stay form still shows its fields after sharing them with the guest form (Unit, Booking reference, Check-in, Check-out, Status; the fixed property)", ["Unit", "Booking reference", "Check-in", "Check-out", "Status", "Harbour Residences"].every((label) => sf$.includes(label)));
   await vite.close();
 
+
+  // ---------------------------------------------------------------------------------------------------- 6
+  console.log("\n# 6. any room / unit identifier, typed: 101, 204, B1, A-12, 12A, G01, Villa 3, Penthouse");
+  const typed = (n, over = {}, who = admin, extra = {}) =>
+    call("POST", "/guests", who, { workspaceId: A, propertyId: extra.propertyId ?? HRS, firstName: `Guest${n}`, lastName: `Typed${String(over.unitNumber ?? n).replace(/\W/g, "")}`, stay: { reservationId: `TY-${n}`, checkIn: iso(30 + n * 4), checkOut: iso(32 + n * 4), status: "reserved", ...over } });
+  const unitsOf = (propertyId) => Unit.find({ propertyId }).lean();
+  const idents = ["101", "204", "B1", "A-12", "12A", "G01", "Villa 3", "Penthouse"];
+  const results = {};
+  for (const [i, ident] of idents.entries()) results[ident] = await typed(i + 1, { unitNumber: ident });
+  const stays6 = {};
+  for (const ident of idents) stays6[ident] = results[ident].json?.data?.stay?._id ? await Stay.findById(results[ident].json.data.stay._id).lean() : null;
+  const hrsUnits = await unitsOf(HRS);
+  const unitByNumber = (n) => hrsUnits.find((u) => u.unitNumber === n);
+  check("T32 [identifiers] every one of 101, 204, B1, A-12, 12A, G01, Villa 3, Penthouse is accepted (201) - numeric and alphanumeric alike", idents.every((n) => results[n].status === 201), idents.map((n) => `${n}:${results[n].status}`).join(" "));
+  check("T33 each typed identifier resolves to ONE unit of Harbour Residences whose human-facing unitNumber is exactly what was typed, and the stay holds that unit's internal id (never the number)", idents.every((n) => unitByNumber(n) && String(stays6[n]?.unitId) === String(unitByNumber(n)._id) && String(stays6[n]?.unitId) !== n && String(stays6[n]?.propertyId) === HRS));
+  check("T34 '204' resolved the EXISTING unit (no second 204): its id is the one created before, created=false; the other seven were created under Harbour Residences (created=true)", String(stays6["204"]?.unitId) === u204 && results["204"].json.data.unit.created === false && idents.filter((n) => n !== "204").every((n) => results[n].json.data.unit.created === true) && hrsUnits.filter((u) => u.unitNumber === "204").length === 1);
+  const lower = await typed(20, { unitNumber: "b1", checkIn: iso(400), checkOut: iso(402) });
+  const spaced = await typed(21, { unitNumber: "villa  3", checkIn: iso(410), checkOut: iso(412) });
+  const hrsUnits2 = await unitsOf(HRS);
+  check("T35 [no duplicate identifiers in a property] 'b1' and 'villa  3' resolve the existing 'B1' and 'Villa 3' (created=false, same unit ids); the property still has exactly one of each", lower.status === 201 && spaced.status === 201 && lower.json.data.unit.created === false && lower.json.data.unit._id === String(unitByNumber("B1")._id) && spaced.json.data.unit._id === String(unitByNumber("Villa 3")._id) && hrsUnits2.length === hrsUnits.length);
+  const plcB1 = await typed(22, { unitNumber: "B1" }, admin, { propertyId: PLC });
+  const plcUnits = await unitsOf(PLC);
+  const plcB1Unit = plcUnits.find((u) => u.unitNumber === "B1");
+  check("T36 [property is the authority] 'B1' typed for Palm Court creates a SEPARATE B1 under Palm Court (created=true); Harbour Residences' B1 is untouched and never reused", plcB1.status === 201 && plcB1.json.data.unit.created === true && String(plcB1Unit?.propertyId) === PLC && String(plcB1Unit?._id) !== String(unitByNumber("B1")._id) && String((await Stay.findById(plcB1.json.data.stay._id).lean()).unitId) === String(plcB1Unit._id));
+  const op301 = await typed(23, { unitNumber: "301" }, operator);
+  const opKnown = await typed(24, { unitNumber: "205", checkIn: iso(500), checkOut: iso(502) }, operator);
+  check("T37 [another property's room is never reused] '301' exists only at Palm Court: typed for Harbour Residences by an operator it is refused (403, no room, no guest); the Palm Court unit is unchanged", op301.status === 403 && /not set up/.test(op301.text) && (await Guest.countDocuments({ lastName: "Typed301" })) === 0 && (await unitsOf(HRS)).every((u) => u.unitNumber !== "301") && String((await unitsOf(PLC)).find((u) => u.unitNumber === "301")._id) === u301);
+  check("T38 [who may add a room] an operator CAN use a room that already exists ('205' -> 201, created=false) but cannot make a new one (403) - adding a room needs the same permission as POST /units", opKnown.status === 201 && opKnown.json.data.unit.created === false && String(opKnown.json.data.unit._id) === u205);
+  const admin301 = await typed(25, { unitNumber: "301" }, admin);
+  check("T39 an administrator typing '301' for Harbour Residences gets a NEW 301 under Harbour Residences (created=true) - a different unit from Palm Court's 301", admin301.status === 201 && admin301.json.data.unit.created === true && admin301.json.data.unit._id !== u301 && String((await Unit.findById(admin301.json.data.unit._id).lean()).propertyId) === HRS);
+  const both = await typed(26, { unitNumber: "B1", unitId: u204 });
+  const blankNumber = await typed(27, { unitNumber: "   " });
+  const badIdents = [];
+  for (const bad of ["<script>", "-x", "a".repeat(41), "B1;DROP", "../204"]) badIdents.push((await typed(28, { unitNumber: bad })).status);
+  const blankStay = blankNumber.json?.data?.stay ? await Stay.findById(blankNumber.json.data.stay._id).lean() : null;
+  check("T40 unitId and unitNumber together are refused (400); a blank room saves an unassigned stay (201, no unit, no unit created); unsafe or over-long identifiers are 400 and create nothing", both.status === 400 && blankNumber.status === 201 && !blankStay?.unitId && blankNumber.json.data.unit === undefined && badIdents.every((st) => st === 400), badIdents.join("/"));
+  const dupBefore = { guests: await Guest.countDocuments({}), units: await Unit.countDocuments({}) };
+  const dupRef2 = await typed(29, { unitNumber: "Brand New 7", reservationId: "HR-204-001" });
+  check("T41 [no half-saved state] a duplicate booking reference after a NEW room was typed: 409, and BOTH the guest and the room this call created are removed again", dupRef2.status === 409 && (await Guest.countDocuments({})) === dupBefore.guests && (await Unit.countDocuments({})) === dupBefore.units && !(await unitsOf(HRS)).some((u) => u.unitNumber === "Brand New 7"));
+  const hrsUnitsBeforeForeign = (await unitsOf(HRS)).length;
+  const foreignTyped = await typed(30, { unitNumber: "Z9" }, adminB, { propertyId: HRS });
+  check("T42 [tenant isolation] workspace B's admin typing a room for workspace A's property: 404, nothing created in either workspace", foreignTyped.status === 404 && (await unitsOf(HRS)).length === hrsUnitsBeforeForeign && (await Unit.countDocuments({ propertyId: OTW })) === 1);
+
+  // ---- the complete flow for numeric and alphanumeric identifiers: typed room -> stay -> Assistant -> room context
+  for (const ident of ["101", "204", "B1", "A-12", "12A"]) {
+    const g = results[ident].json.data;
+    const turn6 = await call("POST", "/conversations/intake", operator, { workspaceId: A, content: "The air conditioning is not cooling.", context: { propertyId: HRS, guestId: g._id, stayId: g.stay._id } });
+    const sig6 = turn6.json?.data?.signal ? await Signal.findById(turn6.json.data.signal._id).lean() : null;
+    const ctx6 = sig6 ? await call("GET", `/signals/${sig6._id}/context?workspaceId=${A}`, operator) : null;
+    const cd6 = ctx6?.json?.data;
+    check(`T43[${ident}] [Assistant -> room context] an investigation on the stay of room ${ident} stores that unit on its Signal and the context endpoint returns the human-facing room '${ident}' (available)`, turn6.status === 201 && String(sig6?.unitId) === String(unitByNumber(ident)._id) && cd6?.unit?.available === true && cd6.unit.unitNumber === ident && cd6.stay?.reservationId === g.stay.reservationId, `status ${turn6.status}`);
+  }
+
   // ---------------------------------------------------------------------------------------------------- source
   console.log("\n# architecture");
   const svc = code(path.join(BACKEND, "src", "services", "guestStayService.js"));
   const ctl = code(path.join(BACKEND, "src", "controllers", "guestController.js"));
   const unitsHook = code(path.join(FRONTEND, "src", "features", "operations", "useUnitsForProperty.js"));
-  check("T29 the combined create reuses createGuest and createStay (no second implementation of the rules), reads no workspace, property or guest from `stay`, and the controller stays thin", /createGuest\(/.test(svc) && /createStay\(/.test(svc) && /STAY_FIELDS = \["unitId", "reservationId", "checkIn", "checkOut", "status", "adults", "children", "source", "metadata"\]/.test(svc) && /workspaceId, guestId: guest\._id, propertyId \}/.test(svc) && /createGuestWithStay\(body\)/.test(ctl) && !/Guest\.|Stay\./.test(ctl));
-  check("T30 the unit options come from the chosen property only (GET /units?propertyId=) through the one API client", /propertyId, limit: 100/.test(unitsHook) && /koiApi/.test(unitsHook) && !/fetch\(|axios/.test(unitsHook));
+  check("T29 the combined create reuses createGuest and createStay (no second implementation of the rules), reads no workspace, property or guest from `stay`, and the controller stays thin", /createGuest\(/.test(svc) && /createStay\(/.test(svc) && /STAY_FIELDS = \["unitId", "unitNumber", "reservationId", "checkIn", "checkOut", "status", "adults", "children", "source", "metadata"\]/.test(svc) && /workspaceId, guestId: guest\._id, propertyId \}/.test(svc) && /createGuestWithStay\(body, \{ canCreateUnit: actorHasPermission\(req\.actor, "workspace:admin"\) \}\)/.test(ctl) && !/Guest\.|Stay\./.test(ctl));
+  check("T30 the unit options (existing guest's stay form) come from the chosen property only (GET /units?propertyId=) through the one API client", /propertyId, limit: 100/.test(unitsHook) && /koiApi/.test(unitsHook) && !/fetch\(|axios/.test(unitsHook));
   check("T31 no AI, embedding, retrieval, authentication, RBAC or tenancy code is touched by the combined create", !/ai\/|knowledge|embedding|retrieval|auth\//.test(svc));
 } finally {
   for (const c of children) {

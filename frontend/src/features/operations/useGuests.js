@@ -46,6 +46,7 @@ export function useGuests(propertyId = "") {
     const guest = mapGuestFromApi(created);
     // A guest created together with its first stay (POST /guests with `stay`) comes back with that stay.
     if (created.stay) guest.stay = mapStayFromApi(created.stay);
+    if (created.unit) guest.unit = { id: created.unit._id, unitNumber: created.unit.unitNumber, created: created.unit.created === true };
     // The list shows one property's guests when a property is selected: a guest of another property is not appended to it.
     if (!propertyId || guest.propertyId === propertyId) {
       setGuests((current) =>

@@ -184,6 +184,8 @@ function recordDetail(key, context) {
     const status = context.stay.status ? formatStatusLabel(context.stay.status) : "";
     return [context.stay.reservationId ? `#${context.stay.reservationId}` : null, status, dates].filter(Boolean).join(" · ") || "on record";
   }
+  // The human-facing room identifier (B1, A-12, 204) - never the unit's internal id.
+  if (key === "unit" && context?.unit?.available) return context.unit.unitNumber ? `Room ${context.unit.unitNumber}` : "on record";
   return "on record";
 }
 

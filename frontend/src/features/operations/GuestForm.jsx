@@ -1,10 +1,9 @@
 import { useState } from "react";
 import StayFields from "./StayFields";
-import { useUnitsForProperty } from "./useUnitsForProperty";
 import { useWorkspaceProperties } from "./useWorkspaceProperties";
 
 const EMPTY = { propertyId: "", firstName: "", lastName: "", email: "", phone: "" };
-const EMPTY_STAY = { unitId: "", reservationId: "", checkIn: "", checkOut: "", status: "reserved" };
+const EMPTY_STAY = { unitNumber: "", reservationId: "", checkIn: "", checkOut: "", status: "reserved" };
 
 /**
  * Create/edit form for a Guest. Reused by GuestsPage (create) and
@@ -14,15 +13,15 @@ const EMPTY_STAY = { unitId: "", reservationId: "", checkIn: "", checkOut: "", s
  * that it does not contradict the guest's existing stays.
  *
  * With `withStay` (creating a guest) the form also takes the guest's first stay - booking reference, unit/room, dates, status - and submits it as `stay` next to the guest's
- * fields, so both are saved together. The guest fields and the stay appear once a property is chosen, and the unit list is that property's units only (changing the property
- * clears the chosen unit). The stay is optional: untick "Add a stay now" to save the guest alone. The server validates the whole combination again.
+ * fields, so both are saved together. The guest fields and the stay appear once a property is chosen. The room is TYPED (any identifier: 101, B1, A-12, 12A, Villa 3): the
+ * server resolves it among the SELECTED property's rooms, so the same text can mean a different room at another property and never another property's room. The stay is
+ * optional: untick "Add a stay now" to save the guest alone. The server validates the whole combination again.
  */
 export default function GuestForm({ initialValues = EMPTY, defaultPropertyId = "", withStay = false, submitLabel = "Save", onSubmit, onCancel }) {
   const [values, setValues] = useState({ ...EMPTY, ...initialValues, propertyId: initialValues?.propertyId || defaultPropertyId || "" });
   const { status: propertiesStatus, properties } = useWorkspaceProperties();
   const [addStay, setAddStay] = useState(true);
   const [stay, setStay] = useState(EMPTY_STAY);
-  const { status: unitsStatus, units, error: unitsError } = useUnitsForProperty(withStay && addStay ? values.propertyId : "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -30,8 +29,6 @@ export default function GuestForm({ initialValues = EMPTY, defaultPropertyId = "
     return (event) => {
       const { value } = event.target;
       setValues((current) => ({ ...current, [field]: value }));
-      // A unit belongs to one property: another property starts with no unit chosen.
-      if (field === "propertyId") setStay((current) => ({ ...current, unitId: "" }));
     };
   }
 
@@ -73,7 +70,7 @@ export default function GuestForm({ initialValues = EMPTY, defaultPropertyId = "
         ...(includeStay
           ? {
               stay: {
-                unitId: stay.unitId || null,
+                ...(stay.unitNumber.trim() ? { unitNumber: stay.unitNumber.trim() } : {}),
                 reservationId: stay.reservationId.trim() || undefined,
                 checkIn: stay.checkIn || null,
                 checkOut: stay.checkOut || null,
@@ -164,12 +161,7 @@ export default function GuestForm({ initialValues = EMPTY, defaultPropertyId = "
               <span>Add a stay now</span>
             </label>
             {addStay ? (
-              <StayFields values={stay} onChange={setStayField} units={units} unitsStatus={unitsStatus} unitLabel="Unit / Room" />
-            ) : null}
-            {addStay && unitsError ? (
-              <p className="op-form-error" role="alert">
-                {unitsError}
-              </p>
+              <StayFields values={stay} onChange={setStayField} unitInput="text" unitLabel="Unit / Room" />
             ) : null}
           </fieldset>
         ) : null}

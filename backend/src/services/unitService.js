@@ -33,6 +33,32 @@ async function workspacePropertyIds(workspaceId) {
   return properties.map((item) => item._id);
 }
 
+const UNIT_NUMBER_MAX = 40;
+// A room / unit identifier is TEXT, never a number: 101, B1, A-12, G01, 12A, "Villa 3", Penthouse.
+const UNIT_NUMBER_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._/#-]*$/u;
+
+/** The identifier as typed by a person: trimmed, inner whitespace collapsed; 400 when it is not a plausible room / unit identifier. */
+export function cleanUnitNumber(value) {
+  const text = typeof value === "string" ? value.normalize("NFKC").replace(/\s+/g, " ").trim() : "";
+  if (!text || text.length > UNIT_NUMBER_MAX || !UNIT_NUMBER_PATTERN.test(text)) {
+    throw new AppError(`unitNumber must be 1-${UNIT_NUMBER_MAX} letters, digits, spaces or . _ / # -`, 400, { code: "INVALID_FIELD", field: "unitNumber" });
+  }
+  return text;
+}
+
+// The same equivalence the assistant's room matching uses (case and spaces do not make a different room): "b1", "B1" and "B 1" are one room.
+const unitKey = (value) => String(value ?? "").replace(/\s+/g, "").toUpperCase();
+
+/**
+ * The unit of THIS property that carries the identifier, or null. The property is the authority: a unit of any other property is never looked at.
+ * The caller has already proven `propertyId` belongs to the caller's workspace.
+ */
+export async function findUnitByNumberInProperty(propertyId, unitNumber) {
+  const key = unitKey(unitNumber);
+  const units = await Unit.find({ propertyId }).select("propertyId unitNumber type status").limit(5000);
+  return units.find((unit) => unitKey(unit.unitNumber) === key) ?? null;
+}
+
 export async function createUnit(body) {
   requireFields(body, ["workspaceId", "propertyId", "unitNumber"]);
   const workspaceId = requireObjectId(body.workspaceId, "workspaceId");

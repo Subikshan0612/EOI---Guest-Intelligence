@@ -73,7 +73,8 @@ export default function GuestsPage() {
       {created ? (
         <p className="muted" role="status">
           Added {formatGuestName(created)}
-          {created.stay ? ` with stay ${created.stay.reservationId || "(no booking reference)"}` : ""}.{" "}
+          {created.stay ? ` with stay ${created.stay.reservationId || "(no booking reference)"}` : ""}
+          {created.unit ? ` in room ${created.unit.unitNumber}${created.unit.created ? " (new room added to this property)" : ""}` : ""}.{" "}
           <Link to={`/operations/guests/${created.id}`} className="text-button">
             View guest
           </Link>

@@ -1,12 +1,13 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendList, sendSuccess } from "../utils/response.js";
 import * as guestService from "../services/guestService.js";
+import { actorHasPermission } from "../auth/authorize.js";
 import { createGuestWithStay } from "../services/guestStayService.js";
 
 export const createGuest = asyncHandler(async (req, res) => {
   const body = { ...req.body, workspaceId: req.actor.workspaceId };
   // A `stay` in the body creates the guest's first stay in the same request; without one this is the unchanged guest-only create.
-  const data = body.stay === undefined ? await guestService.createGuest(body) : await createGuestWithStay(body);
+  const data = body.stay === undefined ? await guestService.createGuest(body) : await createGuestWithStay(body, { canCreateUnit: actorHasPermission(req.actor, "workspace:admin") });
   sendSuccess(res, data, 201);
 });
 
