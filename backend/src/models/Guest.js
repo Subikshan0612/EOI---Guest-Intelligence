@@ -8,6 +8,14 @@ const guestSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // The Property this guest belongs to (workspace -> property -> guest). Optional in the SCHEMA only so that guests created before this field existed stay valid and
+    // readable; guestService requires it for every new guest, and services/operationalScope.js refuses to link a guest to a different property.
+    propertyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Property",
+      default: undefined,
+      index: true,
+    },
     externalId: {
       type: String,
       trim: true,
@@ -59,5 +67,6 @@ guestSchema.index(
 );
 guestSchema.index({ workspaceId: 1, email: 1 });
 guestSchema.index({ workspaceId: 1, lastName: 1, firstName: 1 });
+guestSchema.index({ workspaceId: 1, propertyId: 1, lastName: 1, firstName: 1 });
 
 export const Guest = mongoose.model("Guest", guestSchema);

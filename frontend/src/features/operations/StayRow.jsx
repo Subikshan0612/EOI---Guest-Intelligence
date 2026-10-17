@@ -36,6 +36,8 @@ export default function StayRow({
       <li className="op-stay-row is-editing">
         <StayForm
           guestName={guestName}
+          propertyId={stay.propertyId}
+          propertyName={propertyName}
           initialValues={stay}
           submitLabel="Save stay"
           onCancel={() => setEditing(false)}
@@ -61,7 +63,7 @@ export default function StayRow({
           ) : (
             <span className="op-stay-property">{propertyName || "Unknown property"}</span>
           )}
-          <span className="muted">{unitNumber ? `Unit ${unitNumber}` : "Unassigned unit"}</span>
+          <span className="muted">{[stay.reservationId, unitNumber ? `Unit ${unitNumber}` : "Unassigned unit"].filter(Boolean).join(" · ")}</span>
         </div>
         <div className="op-stay-dates muted">
           {stay.checkIn ? formatStayDate(stay.checkIn) : "No check-in set"}

@@ -19,6 +19,7 @@ import {
   toPlain,
 } from "./queryHelpers.js";
 import { extractStructuredIssue } from "./structuredIssue.js";
+import { assertGuestInProperty } from "./operationalScope.js";
 
 const UPDATABLE = [
   "propertyId",
@@ -43,6 +44,8 @@ const UPDATABLE = [
  * stay, in this unit, at this property" — the pieces must actually agree.
  */
 async function validateOptionalRefs(workspaceId, refs) {
+  let stay = null;
+  let guest = null;
   if (refs.propertyId) {
     const property = await findByIdOr404(Property, refs.propertyId, "Property");
     assertSameWorkspace(property, workspaceId, "Property");
@@ -59,12 +62,12 @@ async function validateOptionalRefs(workspaceId, refs) {
   }
 
   if (refs.guestId) {
-    const guest = await findByIdOr404(Guest, refs.guestId, "Guest");
+    guest = await findByIdOr404(Guest, refs.guestId, "Guest");
     assertSameWorkspace(guest, workspaceId, "Guest");
   }
 
   if (refs.stayId) {
-    const stay = await findByIdOr404(Stay, refs.stayId, "Stay");
+    stay = await findByIdOr404(Stay, refs.stayId, "Stay");
     assertSameWorkspace(stay, workspaceId, "Stay");
 
     if (refs.guestId && String(stay.guestId) !== String(refs.guestId)) {
@@ -77,6 +80,14 @@ async function validateOptionalRefs(workspaceId, refs) {
       throw new AppError("Stay does not belong to the given unit", 400);
     }
   }
+
+  // Workspace -> Property -> Guest: the Signal's guest must belong to the Signal's property (the property it names, or its stay's). A guest created before guests had a
+  // property (no propertyId) is tolerated here so existing records stay usable; a guest of a DIFFERENT property never is.
+  const effectivePropertyId = refs.propertyId ?? stay?.propertyId;
+  if (guest && effectivePropertyId) assertGuestInProperty(guest, effectivePropertyId, { allowUnassigned: true });
+
+  // The property is derived by the server when only a stay or a guest was named, so a Signal that carries a guest or a stay always carries its property too.
+  return { propertyId: effectivePropertyId ?? guest?.propertyId ?? undefined };
 }
 
 /** occurredAt/detectedAt must be valid dates when supplied; both are optional. */
@@ -101,7 +112,8 @@ export async function createSignal(body) {
     stayId: parseObjectId(body.stayId, "stayId"),
   };
 
-  await validateOptionalRefs(workspaceId, refs);
+  const derived = await validateOptionalRefs(workspaceId, refs);
+  if (!refs.propertyId && derived.propertyId) refs.propertyId = derived.propertyId;
 
   const signal = await Signal.create({
     workspaceId,
@@ -177,12 +189,15 @@ export async function updateSignal(id, body, workspaceId) {
   assertValidSignalDate(updates.occurredAt, "occurredAt");
   assertValidSignalDate(updates.detectedAt, "detectedAt");
 
-  await validateOptionalRefs(signal.workspaceId, {
-    propertyId: updates.propertyId ?? signal.propertyId,
-    unitId: updates.unitId ?? signal.unitId,
-    guestId: updates.guestId ?? signal.guestId,
-    stayId: updates.stayId ?? signal.stayId,
-  });
+  // The relationships are re-checked only when one of them is being changed: an edit of the title or severity of an older record must not start failing on it.
+  if (["propertyId", "unitId", "guestId", "stayId"].some((key) => updates[key] !== undefined)) {
+    await validateOptionalRefs(signal.workspaceId, {
+      propertyId: updates.propertyId ?? signal.propertyId,
+      unitId: updates.unitId ?? signal.unitId,
+      guestId: updates.guestId ?? signal.guestId,
+      stayId: updates.stayId ?? signal.stayId,
+    });
+  }
 
   Object.assign(signal, updates);
   // L1.3: the structured issue follows the words it was derived from. `issue` itself is not updatable; it is re-derived by the server whenever the title, description or severity changes.

@@ -70,6 +70,7 @@ export function mapGuestFromApi(doc) {
   return {
     id: doc._id,
     workspaceId: doc.workspaceId,
+    propertyId: doc.propertyId ?? null,
     externalId: doc.externalId ?? "",
     firstName: doc.firstName ?? "",
     lastName: doc.lastName ?? "",

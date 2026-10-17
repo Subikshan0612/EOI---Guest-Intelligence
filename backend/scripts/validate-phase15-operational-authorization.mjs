@@ -124,8 +124,8 @@ async function main() {
     const UA = await mkUnit(PA);
     const UB = await mkUnit(PB);
     const mkGuest = (ws, extra = {}) => Guest.create({ workspaceId: ws._id, firstName: PII.first, lastName: PII.last, email: `${uniq()}.${PII.email}`, phone: PII.phone, ...extra });
-    const GA = await mkGuest(wsA);
-    const GB = await mkGuest(wsB);
+    const GA = await mkGuest(wsA, { propertyId: PA._id });
+    const GB = await mkGuest(wsB, { propertyId: PB._id });
     const mkStay = (ws, guest, property, unit, extra = {}) => Stay.create({ workspaceId: ws._id, guestId: guest._id, propertyId: property._id, unitId: unit?._id, reservationId: `${PII.reservation}-${uniq()}`, status: "confirmed", checkIn: new Date("2031-01-01"), checkOut: new Date("2031-01-03"), ...extra });
     const SA = await mkStay(wsA, GA, PA, UA);
     const SB = await mkStay(wsB, GB, PB, UB, { checkIn: new Date("2032-01-01"), checkOut: new Date("2032-01-03") });
@@ -155,7 +155,7 @@ async function main() {
       property: { path: "/properties", read: ["viewer", "operator", "reviewer", "admin"], write: ["admin"], seed: PA, seedB: PB, create: (ws) => ({ workspaceId: ws, name: `P15 new ${uniq()}`, code: `P15N-${uniq()}` }), patch: { name: "P15 renamed" }, model: Property },
       unit: { path: "/units", read: ["viewer", "operator", "reviewer", "admin"], write: ["admin"], seed: UA, seedB: UB, create: (ws) => ({ workspaceId: ws, propertyId: String(PA._id), unitNumber: `N-${uniq()}` }), patch: { type: "suite" }, model: Unit },
       signal: { path: "/signals", read: ["viewer", "operator", "reviewer", "admin"], write: ["operator", "reviewer", "admin"], seed: GSigA, seedB: GSigB, create: (ws) => ({ workspaceId: ws, type: "maintenance", title: `P15 created ${uniq()}` }), patch: { title: "P15 retitled" }, model: Signal },
-      guest: { path: "/guests", read: ["operator", "reviewer", "admin"], write: ["operator", "reviewer", "admin"], seed: GA, seedB: GB, create: (ws) => ({ workspaceId: ws, firstName: "P15new", lastName: "Guest", email: `${uniq()}@example.invalid` }), patch: { phone: "7770002626" }, model: Guest },
+      guest: { path: "/guests", read: ["operator", "reviewer", "admin"], write: ["operator", "reviewer", "admin"], seed: GA, seedB: GB, create: (ws) => ({ workspaceId: ws, propertyId: String(ws === A ? PA._id : PB._id), firstName: "P15new", lastName: "Guest", email: `${uniq()}@example.invalid` }), patch: { phone: "7770002626" }, model: Guest },
       stay: { path: "/stays", read: ["operator", "reviewer", "admin"], write: ["operator", "reviewer", "admin"], seed: SA, seedB: SB, create: (ws) => ({ workspaceId: ws, guestId: String(GA._id), propertyId: String(PA._id), reservationId: `P15-NEW-${uniq()}` }), patch: { source: "p15" }, model: Stay },
     };
     const created = []; // [resourceName, id] of records this suite created over HTTP (for cleanup counts)

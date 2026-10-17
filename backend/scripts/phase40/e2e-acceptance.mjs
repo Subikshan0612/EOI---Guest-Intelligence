@@ -128,7 +128,7 @@ if (STAGE === "api") {
   const propId = String(prop.data?._id);
   const units = {};
   for (const n of ["204", "305", "101"]) units[n] = String((await mkR(`unit ${n}`, "POST", "/units", ad, { workspaceId: A, propertyId: propId, unitNumber: n })).data?._id);
-  const guest = await mkR("guest", "POST", "/guests", ad, { workspaceId: A, firstName: "Synthetic", lastName: "Guest" });
+  const guest = await mkR("guest", "POST", "/guests", ad, { workspaceId: A, propertyId: propId, firstName: "Synthetic", lastName: "Guest" });
   const stay = await mkR("stay (unit 204)", "POST", "/stays", ad, { workspaceId: A, guestId: String(guest.data?._id), propertyId: propId, unitId: units["204"], checkIn: new Date(Date.now() - 86400000).toISOString(), checkOut: new Date(Date.now() + 2 * 86400000).toISOString(), status: "checked_in" });
   const propB = await mkR("property B", "POST", "/properties", adB, { workspaceId: B, name: "P40 B Residency", code: "P40B" });
   const sigB = await mkR("signal B (other tenant)", "POST", "/signals", adB, { workspaceId: B, type: "maintenance", severity: "medium", title: "Tenant B private signal", description: "TENANT-B-PRIVATE-MARKER", propertyId: String(propB.data?._id) });
@@ -178,7 +178,7 @@ if (STAGE === "api") {
   check("RB2 viewer cannot create a signal (403)", (await call("POST", "/signals", { token: T("viewerA"), body: { workspaceId: A, type: "other", title: "x" } })).status === 403);
   check("RB3 viewer cannot generate an analysis (403)", (await call("POST", `/intelligence/analyze/${sidA}?workspaceId=${A}`, { token: T("viewerA") })).status === 403);
   check("RB4 viewer cannot read guests (403)", (await rd("viewerA", `/guests?workspaceId=${A}`)).status === 403);
-  check("RB5 operator cannot create a property (403) but can create a guest", (await call("POST", "/properties", { token: T("operatorA"), body: { workspaceId: A, name: "x", code: "ZZ" } })).status === 403 && (await call("POST", "/guests", { token: T("operatorA"), body: { workspaceId: A, firstName: "Op", lastName: "Created" } })).status === 201);
+  check("RB5 operator cannot create a property (403) but can create a guest", (await call("POST", "/properties", { token: T("operatorA"), body: { workspaceId: A, name: "x", code: "ZZ" } })).status === 403 && (await call("POST", "/guests", { token: T("operatorA"), body: { workspaceId: A, propertyId: propId, firstName: "Op", lastName: "Created" } })).status === 201);
   check("RB6 operator cannot approve a decision (403: review permission absent)", (await call("POST", `/decisions/${new mongoose.Types.ObjectId()}/approve?workspaceId=${A}`, { token: T("operatorA") })).status === 403);
   check("RB7 NOBODY may execute an action: an admin POST /actions is 403 (action:execute is held by no role)", (await call("POST", "/actions", { token: T("adminA"), body: { workspaceId: A } })).status === 403);
   check("RB8 NOBODY may record an outcome: an admin POST /outcomes is 403", (await call("POST", "/outcomes", { token: T("adminA"), body: { workspaceId: A } })).status === 403);

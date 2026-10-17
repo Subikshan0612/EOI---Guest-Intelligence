@@ -5,11 +5,12 @@ import * as messageService from "../services/messageService.js";
 import { processIntakeTurn } from "../services/signalIntakeService.js";
 
 /**
- * Phase 47 - one operator turn of the conversational Signal intake: POST /api/conversations/intake { conversationId?, content }. The workspace is the VERIFIED
- * membership; no body field names a role, user, workspace or model. It creates a Signal (201) or answers with a clarification / refusal (200) and never calls AI.
+ * Phase 47 - one operator turn of the conversational Signal intake: POST /api/conversations/intake { conversationId?, content, context?: { propertyId, guestId?, stayId? } }. The workspace is the VERIFIED
+ * membership; no body field names a role, user, workspace or model. `context` is a SELECTION only: the records are loaded inside the verified workspace and their relationships
+ * (guest -> property, stay -> property and guest) are checked by the server before anything is created. It creates a Signal (201) or answers with a clarification / refusal (200) and never calls AI.
  */
 export const intakeTurn = asyncHandler(async (req, res) => {
-  const result = await processIntakeTurn({ workspaceId: req.actor.workspaceId, conversationId: req.body?.conversationId, content: req.body?.content });
+  const result = await processIntakeTurn({ workspaceId: req.actor.workspaceId, conversationId: req.body?.conversationId, content: req.body?.content, context: req.body?.context });
   sendSuccess(res, result, result.created ? 201 : 200);
 });
 

@@ -115,7 +115,7 @@ console.log("\n# MongoDB outage and recovery (a second backend behind a TCP forw
   check("M.1 with MongoDB reachable the second backend serves normally", ok1.status === 200, `${ok1.status}`);
   accepting = false; for (const s of sockets) s.destroy(); sockets.clear(); await sleep(500);
   const down = await call(B3, "GET", `/signals?workspaceId=${A}`, "adminA", undefined, 40000);
-  const downWrite = await call(B3, "POST", "/guests", "adminA", { workspaceId: A, firstName: "Should", lastName: "NotPersist" }, 40000);
+  const downWrite = await call(B3, "POST", "/guests", "adminA", { workspaceId: A, propertyId: "64b000000000000000000001", firstName: "Should", lastName: "NotPersist" }, 40000);
   check(`M.2 with MongoDB DOWN a read fails cleanly (HTTP ${down.status}, ${down.ms} ms), never a success, with a generic message and no URI/credential/stack in the body`, down.status >= 500 && down.status < 600 && leak(down) && !/27999|27017|127\.0\.0\.1/.test(down.raw), `${down.status} ${down.j?.message ?? ""}`);
   check(`M.3 a WRITE during the outage fails cleanly (HTTP ${downWrite.status}) and nothing is persisted`, downWrite.status >= 500 && (await M.Guest.countDocuments({ lastName: "NotPersist" })) === 0, `${downWrite.status}`);
   accepting = true; let rec = null; for (let i = 0; i < 30 && !rec; i += 1) { const r = await call(B3, "GET", `/signals?workspaceId=${A}`, "adminA", undefined, 15000); if (r.status === 200) rec = r; else await sleep(1000); }

@@ -3,12 +3,16 @@ import { Link } from "react-router-dom";
 import { Plus, User } from "lucide-react";
 import GuestForm from "../features/operations/GuestForm";
 import { useGuests } from "../features/operations/useGuests";
+import { useWorkspaceProperties } from "../features/operations/useWorkspaceProperties";
 import { formatGuestName } from "../features/operations/operationsMapping";
 import RetryButton from "../components/auth/RetryButton";
 
 export default function GuestsPage() {
-  const { guests, status, error, reload, createGuest } = useGuests();
+  const [propertyFilter, setPropertyFilter] = useState("");
+  const { guests, status, error, reload, createGuest } = useGuests(propertyFilter);
+  const { properties } = useWorkspaceProperties();
   const [showCreate, setShowCreate] = useState(false);
+  const propertyName = (id) => properties.find((property) => property.id === id)?.name ?? null;
 
   if (status === "unconfigured") {
     return (
@@ -17,7 +21,7 @@ export default function GuestsPage() {
           <p className="page-kicker">Operations</p>
           <h1 className="page-title">Guests &amp; stays</h1>
           <p className="page-lead">
-            The guests in this workspace and their stays: who is in which room, and when they arrive and leave. The assistant uses
+            The guests of each property and their stays: who is in which room, and when they arrive and leave. The assistant uses
             these records when it assesses a report about a room.
           </p>
         </section>
@@ -30,10 +34,9 @@ export default function GuestsPage() {
       <header className="op-page-header">
         <div>
           <p className="page-kicker">Operations</p>
-          <h1 className="page-title">Guests</h1>
+          <h1 className="page-title">Guests &amp; stays</h1>
           <p className="page-lead">
-            The guests in this workspace, and the stays EOI will eventually resolve signals
-            against.
+            Every guest belongs to a property, and every stay belongs to a guest of that property. These are the records EOI uses when it assesses a report about a room.
           </p>
         </div>
         <button
@@ -51,6 +54,7 @@ export default function GuestsPage() {
           <h2 className="card-label">New guest</h2>
           <GuestForm
             submitLabel="Create guest"
+            defaultPropertyId={propertyFilter}
             onCancel={() => setShowCreate(false)}
             onSubmit={async (values) => {
               await createGuest(values);
@@ -59,6 +63,20 @@ export default function GuestsPage() {
           />
         </section>
       ) : null}
+
+      <div className="op-form-row">
+        <label className="op-field">
+          <span className="op-field-label">Property</span>
+          <select className="op-field-input" value={propertyFilter} onChange={(event) => setPropertyFilter(event.target.value)}>
+            <option value="">All properties</option>
+            {properties.map((property) => (
+              <option key={property.id} value={property.id}>
+                {property.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {status === "loading" ? (
         <p className="muted">Loading guests…</p>
@@ -69,7 +87,9 @@ export default function GuestsPage() {
         </section>
       ) : guests.length === 0 ? (
         <section className="investigation-state">
-          <p className="page-lead">No guests yet. Add the first one to get started.</p>
+          <p className="page-lead">
+            {propertyFilter ? "No guests have been added to this property yet." : "No guests yet. Add a property, then add its first guest."}
+          </p>
         </section>
       ) : (
         <ul className="op-list">
@@ -83,6 +103,7 @@ export default function GuestsPage() {
                     {[guest.email, guest.phone].filter(Boolean).join(" · ") || "No contact details"}
                   </span>
                 </span>
+                <span className="status-chip">{guest.propertyId ? propertyName(guest.propertyId) || "Property" : "No property yet"}</span>
               </Link>
             </li>
           ))}

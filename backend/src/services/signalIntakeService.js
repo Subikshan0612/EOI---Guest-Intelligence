@@ -7,6 +7,7 @@ import { AppError } from "../utils/AppError.js";
 import { requireObjectId } from "../utils/objectId.js";
 import { createServerMessage } from "./messageService.js";
 import { findInWorkspaceOr404, toPlain } from "./queryHelpers.js";
+import { resolveOperationalScope } from "./operationalScope.js";
 import { createSignal } from "./signalService.js";
 import { INTAKE_LIMITS, INTAKE_OUTCOME, interpretOperatorMessage, normalizeIntakeText } from "./signalInterpreter.js";
 
@@ -55,6 +56,37 @@ async function currentStayForUnit(workspaceId, unitId) {
   return stays.length === 1 ? stays[0] : null;
 }
 
+const CONTEXT_KEYS = ["propertyId", "guestId", "stayId"];
+const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
+
+/**
+ * The operational context a browser SELECTED (Property -> Guest -> Stay), as untrusted input: a plain object with only those three keys, each an ObjectId string (or absent).
+ * Nothing in it is believed - resolveOperationalScope loads every record inside the verified workspace and checks how they relate. `undefined` = no explicit context
+ * (the text-only intake, unchanged).
+ */
+export function normalizeContextInput(value) {
+  if (value === undefined || value === null) return undefined;
+  const bad = (message, field) => new AppError(message, 400, { code: "INVALID_FIELD", field });
+  if (typeof value !== "object" || Array.isArray(value)) throw bad("context must be an object", "context");
+  for (const key of Object.keys(value)) if (!CONTEXT_KEYS.includes(key)) throw bad(`context.${key} is not accepted`, "context");
+  const out = {};
+  for (const key of CONTEXT_KEYS) {
+    const raw = value[key];
+    if (raw === undefined || raw === null || raw === "") continue;
+    if (typeof raw !== "string" || !OBJECT_ID_RE.test(raw)) throw bad(`context.${key} must be an id`, `context.${key}`);
+    out[key] = raw;
+  }
+  return out;
+}
+
+/** The context a stored conversation was started with (undefined for a conversation that has none: the text-only intake). */
+const contextOf = (conversation) =>
+  conversation.propertyId
+    ? { propertyId: String(conversation.propertyId), ...(conversation.guestId ? { guestId: String(conversation.guestId) } : {}), ...(conversation.stayId ? { stayId: String(conversation.stayId) } : {}) }
+    : undefined;
+
+const sameContext = (a, b) => CONTEXT_KEYS.every((key) => (a?.[key] ?? "") === (b?.[key] ?? ""));
+
 /** The question this conversation is waiting on, if its LAST message is a server-written clarification. */
 async function pendingClarification(conversationId) {
   const last = await Message.findOne({ conversationId }).sort({ createdAt: -1, _id: -1 }).lean();
@@ -68,41 +100,63 @@ const INSTRUCTIONS_NOTE = " Instructions written inside the report are not follo
 /**
  * @returns {Promise<{ outcome: string, created: boolean, conversation: object, userMessage: object, assistantMessage: object, signal?: object }>}
  */
-export async function processIntakeTurn({ workspaceId, conversationId, content }) {
+export async function processIntakeTurn({ workspaceId, conversationId, content, context }) {
   const scope = requireObjectId(workspaceId, "workspaceId");
   const text = normalizeIntakeText(content); // validates BEFORE anything is created
+  const selection = normalizeContextInput(context); // untrusted shape check only; the records are verified below
 
   let conversation;
+  let explicit; // the VERIFIED operational context { property, guest, stay, unit } of this investigation, when it has one
   if (conversationId === undefined || conversationId === null || conversationId === "") {
-    conversation = await Conversation.create({ workspaceId: scope, title: conversationTitle(text), status: "active" });
+    // A new investigation: the selection (when there is one) is verified BEFORE anything is created, so a mismatched or foreign id leaves no conversation behind.
+    if (selection) explicit = await resolveOperationalScope(scope, selection);
+    conversation = await Conversation.create({
+      workspaceId: scope,
+      ...(explicit ? { propertyId: explicit.property._id, ...(explicit.guest ? { guestId: explicit.guest._id } : {}), ...(explicit.stay ? { stayId: explicit.stay._id } : {}) } : {}),
+      title: conversationTitle(text),
+      status: "active",
+    });
   } else {
     conversation = await findInWorkspaceOr404(Conversation, requireObjectId(conversationId, "conversationId"), scope, "Conversation");
     if (conversation.status === "archived") throw new AppError("This conversation is archived", 409, { code: "CONVERSATION_ARCHIVED" });
+    // The context an investigation started with is fixed: later turns use what the SERVER stored, and a different selection cannot be slipped in.
+    const stored = contextOf(conversation);
+    if (selection && !sameContext(selection, stored)) {
+      throw new AppError("The operational context of an investigation cannot be changed. Start a new investigation instead.", 409, { code: "CONVERSATION_CONTEXT_FIXED" });
+    }
+    if (stored) explicit = await resolveOperationalScope(scope, stored); // re-verified every turn: the records may have changed since
   }
 
   const pendingText = await pendingClarification(conversation._id);
   const reference = await loadReference(scope);
+  const fixed = explicit
+    ? { propertyId: String(explicit.property._id), propertyName: explicit.property.name, locked: Boolean(explicit.stay), ...(explicit.unit ? { unitId: String(explicit.unit._id), unitNumber: explicit.unit.unitNumber } : {}) }
+    : undefined;
   const userMessage = await createServerMessage(conversation._id, scope, { role: "user", type: "text", content: text });
-  const result = interpretOperatorMessage({ text, pendingText, properties: reference.properties, units: reference.units });
+  const result = interpretOperatorMessage({ text, pendingText, properties: reference.properties, units: reference.units, fixed });
 
   let assistantContent;
   let intake;
   let signal;
   if (result.outcome === INTAKE_OUTCOME.READY) {
     const { draft } = result;
-    const stay = await currentStayForUnit(scope, draft.unitId);
+    // Explicit context is authoritative: its guest and stay are the ones the operator selected (verified above). Without it, the existing behaviour is unchanged: the ONE
+    // checked-in stay of the room the words named, read from the workspace's own records.
+    const stay = explicit ? explicit.stay : await currentStayForUnit(scope, draft.unitId);
+    const guestRef = explicit ? explicit.guest?._id : stay?.guestId;
     signal = await createSignal({
       workspaceId: scope,
       propertyId: draft.propertyId,
       unitId: draft.unitId,
-      ...(stay && stay.guestId ? { guestId: String(stay.guestId), stayId: String(stay._id) } : {}),
+      ...(guestRef ? { guestId: String(guestRef) } : {}),
+      ...(stay && (explicit || stay.guestId) ? { stayId: String(stay._id) } : {}),
       type: draft.type,
       source: "staff",
       ...(draft.severity ? { severity: draft.severity } : {}),
       title: draft.title,
       description: draft.description,
       // Provenance of HOW this Signal was recorded - never a fact about the world. Ids are strings the server resolved itself.
-      metadata: { intake: { channel: "conversation", conversationId: String(conversation._id), severityStated: draft.severityStated, typeBasis: draft.typeBasis, locationBasis: draft.location.basis, stayLinked: Boolean(stay && stay.guestId) } },
+      metadata: { intake: { channel: "conversation", conversationId: String(conversation._id), severityStated: draft.severityStated, typeBasis: draft.typeBasis, locationBasis: draft.location.basis, stayLinked: Boolean(stay && (explicit || stay.guestId)), contextBasis: explicit ? "explicit" : "text" } },
     });
     await Conversation.updateOne({ _id: conversation._id, workspaceId: scope }, { $addToSet: { signalIds: signal._id } });
     assistantContent = SIGNAL_CREATED_TEXT + (result.instructionsIgnored ? INSTRUCTIONS_NOTE : "");

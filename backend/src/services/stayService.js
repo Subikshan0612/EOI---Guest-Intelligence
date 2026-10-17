@@ -17,6 +17,7 @@ import {
   requireFields,
   toPlain,
 } from "./queryHelpers.js";
+import { assertGuestInProperty } from "./operationalScope.js";
 
 const UPDATABLE = [
   "unitId",
@@ -44,6 +45,8 @@ async function validateStayRefs({ workspaceId, guestId, propertyId, unitId }) {
 
   assertSameWorkspace(guest, workspaceId, "Guest");
   assertSameWorkspace(property, workspaceId, "Property");
+  // Workspace -> Property -> Guest -> Stay: a stay's guest belongs to the stay's own property (never another property's guest, never one with no property).
+  assertGuestInProperty(guest, propertyId);
 
   if (unitId) {
     const unit = await findByIdOr404(Unit, unitId, "Unit");
@@ -162,8 +165,16 @@ export async function listStays(query) {
   });
   const filter = { workspaceId };
 
-  if (query.guestId) filter.guestId = parseObjectId(query.guestId, "guestId");
-  if (query.propertyId) filter.propertyId = parseObjectId(query.propertyId, "propertyId");
+  // Property + Guest scope. Every filter is ANDed with the verified workspace, so another tenant's id can only ever match nothing (the existing contract: an empty list). A
+  // guest of THIS workspace that is known to belong to a DIFFERENT property than the one asked for is refused instead of silently returning nothing.
+  const propertyId = parseObjectId(query.propertyId, "propertyId");
+  const guestId = parseObjectId(query.guestId, "guestId");
+  if (guestId && propertyId) {
+    const guest = await Guest.findOne({ _id: guestId, workspaceId });
+    if (guest) assertGuestInProperty(guest, propertyId, { allowUnassigned: true });
+  }
+  if (guestId) filter.guestId = guestId;
+  if (propertyId) filter.propertyId = propertyId;
   if (query.unitId) filter.unitId = parseObjectId(query.unitId, "unitId");
   if (query.status) filter.status = query.status;
 

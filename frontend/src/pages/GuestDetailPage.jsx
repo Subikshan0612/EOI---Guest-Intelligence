@@ -110,6 +110,7 @@ export default function GuestDetailPage() {
   }
 
   const guestName = formatGuestName(guest);
+  const guestPropertyName = guest.propertyId ? propertiesById[guest.propertyId] : null;
 
   async function handleDeleteGuest() {
     if (!confirmingDelete) {
@@ -140,6 +141,18 @@ export default function GuestDetailPage() {
               <h1 className="page-title">{guestName}</h1>
               <p className="page-lead">
                 {[guest.email, guest.phone].filter(Boolean).join(" · ") || "No contact details on file"}
+              </p>
+              <p className="muted">
+                {guest.propertyId ? (
+                  <>
+                    Property —{" "}
+                    <Link to={`/operations/properties/${guest.propertyId}`} className="op-stay-property">
+                      {guestPropertyName || "Unknown property"}
+                    </Link>
+                  </>
+                ) : (
+                  "Not assigned to a property yet. Edit this guest to choose one before adding stays."
+                )}
               </p>
             </>
           )}
@@ -185,6 +198,8 @@ export default function GuestDetailPage() {
             type="button"
             className="text-button"
             onClick={() => setShowAddStay((open) => !open)}
+            disabled={!guest.propertyId}
+            title={guest.propertyId ? undefined : "Assign this guest to a property first"}
           >
             <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
             Add stay
@@ -195,6 +210,8 @@ export default function GuestDetailPage() {
           <div className="koi-card">
             <StayForm
               guestName={guestName}
+              propertyId={guest.propertyId}
+              propertyName={guestPropertyName}
               submitLabel="Create stay"
               onCancel={() => setShowAddStay(false)}
               onSubmit={async (values) => {

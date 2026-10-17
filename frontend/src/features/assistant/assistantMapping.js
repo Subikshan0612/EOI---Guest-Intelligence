@@ -32,7 +32,16 @@ export function mapMessages(items) {
 
 export function mapConversation(doc) {
   if (!doc || typeof doc !== "object") return null;
-  return { id: String(doc._id), title: typeof doc.title === "string" && doc.title.trim() ? doc.title.trim() : "Conversation", updatedAt: doc.updatedAt ?? doc.createdAt ?? null };
+  const ref = (value) => (typeof value === "string" && OBJECT_ID.test(value) ? value : null);
+  return {
+    id: String(doc._id),
+    title: typeof doc.title === "string" && doc.title.trim() ? doc.title.trim() : "Conversation",
+    updatedAt: doc.updatedAt ?? doc.createdAt ?? null,
+    // The operational context the investigation was started with (stable references; names are read from the records themselves).
+    propertyId: ref(doc.propertyId),
+    guestId: ref(doc.guestId),
+    stayId: ref(doc.stayId),
+  };
 }
 
 /** The result of one turn: the (possibly new) conversation id and the two stored messages, in display order. */
@@ -78,9 +87,9 @@ export function describeTurnFailure(error) {
   const status = error?.status;
   if (status === 403) return "Your role in this workspace can't record reports. Ask an administrator if you need that access.";
   if (status === 404) return "This conversation is no longer available. Start a new one.";
-  if (status === 409) return "This conversation is archived. Start a new one.";
+  if (status === 409) return "This conversation is archived, or its property, guest and stay can't be changed. Start a new investigation.";
   if (status === 429) return "Too many messages in a short time. Please wait a moment and try again.";
-  if (status === 400) return "That message couldn't be recorded. Check it and try again.";
+  if (status === 400) return "That couldn't be recorded. Check the property, guest and stay you selected and your message, then try again.";
   if (status === 0) return "We couldn't reach EOI. Check your connection and try again.";
   return "We couldn't record that. Please try again.";
 }

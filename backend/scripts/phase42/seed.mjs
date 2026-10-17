@@ -23,7 +23,7 @@ const A = st.wsA; const B = st.wsB;
 const prop = must("property A", await call("POST", "/properties", "adminA", { workspaceId: A, name: "P42 Residency", code: "P42A" }));
 const units = {};
 for (const n of ["204", "305", "101"]) units[n] = String(must(`unit ${n}`, await call("POST", "/units", "adminA", { workspaceId: A, propertyId: prop.d._id, unitNumber: n })).d._id);
-const guest = must("guest", await call("POST", "/guests", "adminA", { workspaceId: A, firstName: "Synthetic", lastName: "Guest" }));
+const guest = must("guest", await call("POST", "/guests", "adminA", { workspaceId: A, propertyId: prop.d._id, firstName: "Synthetic", lastName: "Guest" }));
 const stay = must("stay", await call("POST", "/stays", "adminA", { workspaceId: A, guestId: guest.d._id, propertyId: prop.d._id, unitId: units["204"], checkIn: new Date(Date.now() - 86400000).toISOString(), checkOut: new Date(Date.now() + 2 * 86400000).toISOString(), status: "checked_in" }));
 const docs = [
   { title: "AC Not Cooling - Maintenance Procedure", documentType: "procedure", propertyId: prop.d._id, defaultVisibility: "guest", content: "# Air conditioner not cooling\n\nWhen a guest reports that the air conditioner in an apartment is not cooling or is blowing warm air, dispatch a maintenance technician to inspect the unit within four hours.\n\n## First checks\n\nConfirm the thermostat is set to cool and the filters are clean. Record the room temperature reported by the guest.\n\n## Escalation\n\nIf the unit cannot be repaired the same day, offer the guest a portable fan or move them to another apartment." },

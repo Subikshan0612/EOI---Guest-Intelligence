@@ -1,4 +1,9 @@
+import { Conversation } from "../models/Conversation.js";
+import { Guest } from "../models/Guest.js";
 import { Property } from "../models/Property.js";
+import { Signal } from "../models/Signal.js";
+import { Stay } from "../models/Stay.js";
+import { Unit } from "../models/Unit.js";
 import { Workspace } from "../models/Workspace.js";
 import { AppError } from "../utils/AppError.js";
 import { requireObjectId } from "../utils/objectId.js";
@@ -67,6 +72,26 @@ export async function updateProperty(id, body, workspaceId) {
 export async function deleteProperty(id, workspaceId) {
   const scope = requireObjectId(workspaceId, "workspaceId");
   const property = await findInWorkspaceOr404(Property, requireObjectId(id), scope, "Property");
+
+  // A property that still has operational records is never deleted: there is no cascade, and deleting it would orphan its units, guests, stays, reports and investigations.
+  // The caller is told what is in the way; an unwanted property is retired with status "archived" (an ordinary property update) instead.
+  const [units, guests, stays, signals, investigations] = await Promise.all([
+    Unit.countDocuments({ propertyId: property._id }),
+    Guest.countDocuments({ workspaceId: scope, propertyId: property._id }),
+    Stay.countDocuments({ workspaceId: scope, propertyId: property._id }),
+    Signal.countDocuments({ workspaceId: scope, propertyId: property._id }),
+    Conversation.countDocuments({ workspaceId: scope, propertyId: property._id }),
+  ]);
+  const inUse = { units, guests, stays, reports: signals, investigations };
+  const blocking = Object.entries(inUse).filter(([, count]) => count > 0);
+  if (blocking.length > 0) {
+    throw new AppError(
+      `This property cannot be deleted while it still has ${blocking.map(([name, count]) => `${count} ${name}`).join(", ")}. Set its status to archived instead.`,
+      409,
+      { code: "PROPERTY_HAS_RECORDS", records: inUse },
+    );
+  }
+
   await property.deleteOne();
   return toPlain(property);
 }

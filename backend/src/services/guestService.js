@@ -1,4 +1,7 @@
 import { Guest } from "../models/Guest.js";
+import { Property } from "../models/Property.js";
+import { Signal } from "../models/Signal.js";
+import { Stay } from "../models/Stay.js";
 import { Workspace } from "../models/Workspace.js";
 import { AppError } from "../utils/AppError.js";
 import { requireObjectId } from "../utils/objectId.js";
@@ -17,6 +20,7 @@ const MAX_NAME_SEARCH_LENGTH = 100;
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
 
 const UPDATABLE = [
+  "propertyId",
   "externalId",
   "firstName",
   "lastName",
@@ -26,13 +30,23 @@ const UPDATABLE = [
   "metadata",
 ];
 
+/**
+ * A guest belongs to ONE property of the same workspace. The property is loaded INSIDE the workspace (another tenant's property id is the same 404 as a missing one).
+ */
+async function requireWorkspaceProperty(workspaceId, propertyId) {
+  const id = requireObjectId(propertyId, "propertyId");
+  return findInWorkspaceOr404(Property, id, workspaceId, "Property");
+}
+
 export async function createGuest(body) {
-  requireFields(body, ["workspaceId"]);
+  requireFields(body, ["workspaceId", "propertyId"]);
   const workspaceId = requireObjectId(body.workspaceId, "workspaceId");
   await assertExists(Workspace, workspaceId, "Workspace");
+  const property = await requireWorkspaceProperty(workspaceId, body.propertyId);
 
   const guest = await Guest.create({
     workspaceId,
+    propertyId: property._id,
     externalId: body.externalId,
     firstName: body.firstName,
     lastName: body.lastName,
@@ -52,6 +66,12 @@ export async function listGuests(query) {
     createdAt: -1,
   });
   const filter = { workspaceId };
+
+  // Property scope (Workspace -> Property -> Guest). The property is verified inside the workspace first, so a property of another tenant is a 404, never an empty list.
+  if (query.propertyId) {
+    const property = await requireWorkspaceProperty(workspaceId, query.propertyId);
+    filter.propertyId = property._id;
+  }
 
   if (query.email) filter.email = String(query.email).toLowerCase();
   if (query.externalId) filter.externalId = query.externalId;
@@ -84,6 +104,24 @@ export async function updateGuest(id, body, workspaceId) {
 
   if (Object.keys(updates).length === 0) {
     throw new AppError("No valid fields provided for update", 400);
+  }
+
+  if (updates.propertyId !== undefined) {
+    if (updates.propertyId === null || updates.propertyId === "") {
+      throw new AppError("A guest must belong to a property", 400, { code: "INVALID_FIELD", field: "propertyId" });
+    }
+    const property = await requireWorkspaceProperty(scope, updates.propertyId);
+    updates.propertyId = property._id;
+    if (!guest.propertyId || String(guest.propertyId) !== String(property._id)) {
+      // Moving a guest (or assigning one created before guests had a property) must not leave a stay or a report of this guest pointing at a different property.
+      const [staysElsewhere, signalsElsewhere] = await Promise.all([
+        Stay.exists({ workspaceId: scope, guestId: guest._id, propertyId: { $ne: property._id } }),
+        Signal.exists({ workspaceId: scope, guestId: guest._id, propertyId: { $exists: true, $ne: property._id } }),
+      ]);
+      if (staysElsewhere || signalsElsewhere) {
+        throw new AppError("This guest already has stays or reports at another property", 409, { code: "GUEST_PROPERTY_IN_USE", field: "propertyId" });
+      }
+    }
   }
 
   Object.assign(guest, updates);

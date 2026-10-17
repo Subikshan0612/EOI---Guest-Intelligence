@@ -221,11 +221,11 @@ async function main() {
     );
 
     const guest1 = trackCreated(
-      await expectStatus("setup: guest 1", "POST", "/guests", { workspaceId: wsA, firstName: "Guest", lastName: "One", email: `g1-${stamp}@example.com` }, 201),
+      await expectStatus("setup: guest 1", "POST", "/guests", { workspaceId: wsA, propertyId: propA1, firstName: "Guest", lastName: "One", email: `g1-${stamp}@example.com` }, 201),
       "guestIds",
     );
     const guest2 = trackCreated(
-      await expectStatus("setup: guest 2", "POST", "/guests", { workspaceId: wsA, firstName: "Guest", lastName: "Two", email: `g2-${stamp}@example.com` }, 201),
+      await expectStatus("setup: guest 2", "POST", "/guests", { workspaceId: wsA, propertyId: propA1, firstName: "Guest", lastName: "Two", email: `g2-${stamp}@example.com` }, 201),
       "guestIds",
     );
 

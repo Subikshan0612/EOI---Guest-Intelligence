@@ -125,6 +125,24 @@ function resolveLocation(text, properties, units) {
   return { status: "none" };
 }
 
+/**
+ * EXPLICIT operational context. When the operator chose the Property (and optionally the Guest and Stay) BEFORE describing the issue, that choice is AUTHORITATIVE and the
+ * words only ever describe the event: the text can neither replace the selected property nor pick a record from another property. The location is therefore taken from the
+ * selection - the stay's own unit when a stay was chosen, otherwise a room the operator wrote that is a unit OF THE SELECTED PROPERTY (a room number that exists only in
+ * another property is simply not matched), otherwise the property alone. `fixed` is { propertyId, propertyName, unitId?, unitNumber? } built by the server from the verified
+ * records (signalIntakeService.js), never from a browser value.
+ */
+function resolveFixedLocation(text, units, fixed) {
+  const base = { status: "resolved", propertyId: String(fixed.propertyId), propertyName: fixed.propertyName };
+  if (fixed.unitId) return { ...base, unitId: String(fixed.unitId), unitNumber: fixed.unitNumber, token: fixed.unitNumber };
+  if (fixed.locked) return base; // a selected stay without a unit: the room is not guessed from the words (a Signal's unit must be its stay's unit)
+  for (const token of roomTokens(text)) {
+    const matches = units.filter((unit) => String(unit.propertyId) === String(fixed.propertyId) && normalizeUnit(unit.unitNumber) === token);
+    if (matches.length === 1) return { ...base, unitId: String(matches[0]._id), unitNumber: matches[0].unitNumber, token };
+  }
+  return base;
+}
+
 const firstSentence = (text) => {
   const sentence = text.split(/(?<=[.!?])\s+|\n/).map((part) => part.trim()).find(Boolean) ?? text;
   return sentence.length > INTAKE_LIMITS.titleMax ? `${sentence.slice(0, INTAKE_LIMITS.titleMax - 1).trimEnd()}…` : sentence;
@@ -151,8 +169,8 @@ function eventWords(text, properties) {
   return (rest.match(/[\p{L}\p{N}']+/gu) ?? []).filter((word) => !FILLER.has(word.toLowerCase())).length;
 }
 
-function interpretOnce(text, { properties, units }) {
-  const location = resolveLocation(text, properties, units);
+function interpretOnce(text, { properties, units, fixed }) {
+  const location = fixed ? resolveFixedLocation(text, units, fixed) : resolveLocation(text, properties, units);
   const { type, classified } = classify(text);
   // An event is a recognised kind of event, or at least three words of description beyond WHERE it happened ("room 221 at Harbour View" is a place, not an event).
   const hasEvent = classified || eventWords(text, properties) >= 3;
@@ -164,15 +182,24 @@ function interpretOnce(text, { properties, units }) {
  * @param {{ text: string, pendingText?: string, properties: object[], units: object[] }} input  `text` is already normalised (normalizeIntakeText)
  * @returns {{ outcome: string, message?: string, question?: string, missing?: string[], pendingText?: string, instructionsIgnored?: boolean, draft?: object }}
  */
-export function interpretOperatorMessage({ text, pendingText, properties, units }) {
-  const reference = { properties: properties.slice(0, INTAKE_LIMITS.propertiesMax), units: units.slice(0, INTAKE_LIMITS.unitsMax) };
+export function interpretOperatorMessage({ text, pendingText, properties, units, fixed }) {
+  const reference = { properties: properties.slice(0, INTAKE_LIMITS.propertiesMax), units: units.slice(0, INTAKE_LIMITS.unitsMax), ...(fixed ? { fixed } : {}) };
   if (ACTION_COMMAND.test(text) || OUTCOME_COMMAND.test(text)) return { outcome: INTAKE_OUTCOME.DECLINED, message: DECLINED_MESSAGE };
   const metaInText = hasMeta(text);
+
+  // With an explicit property selected, a report that NAMES a different property is not silently recorded against the selected one (nor moved to the named one): it is
+  // declined with one fixed sentence and nothing is created - the operator starts the investigation for the other property.
+  if (fixed) {
+    const other = namedProperties(text, reference.properties).find((property) => String(property._id) !== String(fixed.propertyId));
+    if (other) return { outcome: INTAKE_OUTCOME.DECLINED, message: `This investigation is for ${fixed.propertyName}, but the report names ${other.name}. Start a new investigation for ${other.name}, or describe what happened at ${fixed.propertyName}.` };
+  }
 
   // A standalone complete report always wins; otherwise the answer is read together with the question that was asked (same conversation, server-held).
   let source = text;
   let read = interpretOnce(text, reference);
-  const complete = (r) => r.location.status === "resolved" && r.hasEvent;
+  // With an explicit selection the location is always resolved, so a message that steers the assistant must show a RECOGNISED kind of event (not merely a few words) to be
+  // recorded as a report; otherwise it is declined exactly like it is without a selection.
+  const complete = (r) => r.location.status === "resolved" && r.hasEvent && (!(fixed && metaInText) || r.classified);
   if (!complete(read) && pendingText) {
     source = `${pendingText}\n${text}`;
     read = interpretOnce(source, reference);
@@ -219,7 +246,7 @@ export function interpretOperatorMessage({ text, pendingText, properties, units 
       typeBasis: read.classified ? "keyword" : "unclassified",
       title: firstSentence(source),
       description,
-      location: { unitNumber: read.location.unitNumber, propertyName: read.location.propertyName, basis: read.location.unitId ? "unit_record" : "property_name" },
+      location: { unitNumber: read.location.unitNumber, propertyName: read.location.propertyName, basis: fixed ? "explicit_selection" : read.location.unitId ? "unit_record" : "property_name" },
     },
   };
 }

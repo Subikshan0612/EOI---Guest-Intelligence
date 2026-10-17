@@ -379,7 +379,7 @@ async function main() {
     await expect("create a property", "POST", "/properties", "reviewer", 403, { workspaceId: A, name: "x", code: "x2" });
     const created = await expect("create a property", "POST", "/properties", "admin", 201, { workspaceId: A, name: `P23 prop ${stamp}`, code: `P23-${stamp}` });
     await expect("create a guest (operations:manage)", "POST", "/guests", "viewer", 403, { workspaceId: A, firstName: "x", lastName: "y" });
-    const guest = await expect("create a guest", "POST", "/guests", "operator", 201, { workspaceId: A, firstName: "P23", lastName: "Guest" });
+    const guest = await expect("create a guest", "POST", "/guests", "operator", 201, { workspaceId: A, propertyId: created.data?._id, firstName: "P23", lastName: "Guest" });
     await expect("delete a guest (workspace:admin)", "DELETE", `/guests/${guest.data?._id}?workspaceId=${A}`, "operator", 403);
     await expect("delete a guest", "DELETE", `/guests/${guest.data?._id}?workspaceId=${A}`, "admin", 200);
     await expect("decision review permission absent for operator (legacy PATCH)", "PATCH", `/decisions/${FAKE}?workspaceId=${A}`, "operator", 403, { status: "approved" });

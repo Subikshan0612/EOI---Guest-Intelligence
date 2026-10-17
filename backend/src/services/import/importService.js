@@ -144,6 +144,9 @@ async function processRow({ workspaceId, propertyId, mappingProfile, parseDate, 
 
   const createsKeylessGuest = !existingGuest && !externalId;
   const guest = existingGuest ?? new Guest(externalId ? { workspaceId, externalId } : { workspaceId });
+  // Workspace -> Property -> Guest: an imported guest belongs to the property the file was imported for (a guest of another property is never re-pointed).
+  if (guest.propertyId && String(guest.propertyId) !== String(propertyId)) throw new RowError("Guest belongs to a different property");
+  guest.propertyId = propertyId;
   for (const [field, value] of Object.entries(row.guest)) guest[field] = value;
 
   const stay = existingStay ?? new Stay({ workspaceId, reservationId, guestId: guest._id, propertyId });

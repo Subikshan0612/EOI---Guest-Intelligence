@@ -195,9 +195,9 @@ async function main() {
     ids.properties.push(propA._id, propB._id);
     const unitA = await Unit.create({ propertyId: propA._id, unitNumber: "24A" });
     const unitB = await Unit.create({ propertyId: propB._id, unitNumber: "24B" });
-    const guestA = await Guest.create({ workspaceId: wsA._id, firstName: M.first, lastName: M.last, email: M.email, phone: M.phone });
+    const guestA = await Guest.create({ workspaceId: wsA._id, propertyId: propA._id, firstName: M.first, lastName: M.last, email: M.email, phone: M.phone });
     const stayA = await Stay.create({ workspaceId: wsA._id, guestId: guestA._id, propertyId: propA._id, unitId: unitA._id, reservationId: `P24-RSV-${stamp}`, status: "checked_in", checkIn: new Date("2030-01-01"), checkOut: new Date("2030-01-05") });
-    const guestB = await Guest.create({ workspaceId: wsB._id, firstName: M.bName, lastName: M.bName, email: M.bEmail, phone: M.bPhone });
+    const guestB = await Guest.create({ workspaceId: wsB._id, propertyId: propB._id, firstName: M.bName, lastName: M.bName, email: M.bEmail, phone: M.bPhone });
     const stayB = await Stay.create({ workspaceId: wsB._id, guestId: guestB._id, propertyId: propB._id, unitId: unitB._id, reservationId: M.bReservation, status: "checked_in", checkIn: new Date("2030-01-01"), checkOut: new Date("2030-01-05") });
 
     const mkSignal = (o) => Signal.create({ workspaceId: wsA._id, propertyId: propA._id, unitId: unitA._id, type: "maintenance", severity: "high", ...o });

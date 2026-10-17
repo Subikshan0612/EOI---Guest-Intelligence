@@ -140,8 +140,8 @@ async function main() {
   const propB = (await Property.create({ workspaceId: wsB, name: "Synthetic Property B", code: `SC${stamp}` }))._id;
   const post = async (url, body) => { const r = await http_(admin, "POST", url, body); if (r.status !== 201) fail(`fixture ${url}`, JSON.stringify(r.json)); return r.json?.data?._id; };
   const unit = await post("/units", { workspaceId: String(wsA), propertyId: String(propA), unitNumber: "204", type: "apartment" });
-  const guest = await post("/guests", { workspaceId: String(wsA), firstName: "Synth", lastName: "Guest", email: `synth-${stamp}@example.invalid`, phone: "10001 20002" });
-  const guestB = await post("/guests", { workspaceId: String(wsB), firstName: "Other", lastName: "Tenant" });
+  const guest = await post("/guests", { workspaceId: String(wsA), propertyId: String(propA), firstName: "Synth", lastName: "Guest", email: `synth-${stamp}@example.invalid`, phone: "10001 20002" });
+  const guestB = await post("/guests", { workspaceId: String(wsB), propertyId: String(propB), firstName: "Other", lastName: "Tenant" });
   const stay = await post("/stays", { workspaceId: String(wsA), guestId: guest, propertyId: String(propA), unitId: unit, reservationId: `SYN-${stamp}`, status: "checked_in", checkIn: new Date().toISOString() });
   const sig = (ws, body) => post("/signals", { workspaceId: String(ws), type: "maintenance", severity: "high", ...body });
   const S1 = await sig(wsA, { title: "Synthetic AC not cooling", description: "Synthetic warm air report.", propertyId: String(propA), unitId: unit, guestId: guest, stayId: stay, source: "guest" });

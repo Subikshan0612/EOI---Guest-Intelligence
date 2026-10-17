@@ -103,9 +103,11 @@ Derived from what the code actually reads: `backend/src`, `backend/server.js`, `
 | Unit | `propertyId:1` | - | lookup by reference (propertyId) | parent-scoped (propertyId -> its workspace) | on first start |
 | Unit | `propertyId:1, unitNumber:1` | unique | one unit number per property | parent-scoped (propertyId -> its workspace) | on first start |
 | Guest | `workspaceId:1` | - | workspace-scoped list / filter / sort | workspace-prefixed | on first start |
+| Guest | `propertyId:1` | - | lookup by reference (propertyId) | secondary key (the service layer always adds the workspace filter) | on first start |
 | Guest | `workspaceId:1, externalId:1` | unique + partial | one guest per external (PMS) id within a workspace (partial: only when an external id exists) | workspace-prefixed | on first start |
 | Guest | `workspaceId:1, email:1` | - | workspace-scoped list / filter / sort | workspace-prefixed | on first start |
 | Guest | `workspaceId:1, lastName:1, firstName:1` | - | workspace-scoped list / filter / sort | workspace-prefixed | on first start |
+| Guest | `workspaceId:1, propertyId:1, lastName:1, firstName:1` | - | workspace-scoped list / filter / sort | workspace-prefixed | on first start |
 | Stay | `workspaceId:1` | - | workspace-scoped list / filter / sort | workspace-prefixed | on first start |
 | Stay | `guestId:1` | - | lookup by reference (guestId) | secondary key (the service layer always adds the workspace filter) | on first start |
 | Stay | `propertyId:1` | - | lookup by reference (propertyId) | secondary key (the service layer always adds the workspace filter) | on first start |
@@ -122,6 +124,7 @@ Derived from what the code actually reads: `backend/src`, `backend/server.js`, `
 | Signal | `workspaceId:1, severity:1` | - | workspace-scoped list / filter / sort | workspace-prefixed | on first start |
 | Signal | `workspaceId:1, status:1` | - | workspace-scoped list / filter / sort | workspace-prefixed | on first start |
 | Signal | `workspaceId:1, occurredAt:-1` | - | workspace-scoped list / filter / sort | workspace-prefixed | on first start |
+| Conversation | `propertyId:1` | - | lookup by reference (propertyId) | secondary key (the service layer always adds the workspace filter) | on first start |
 | Conversation | `guestId:1` | - | lookup by reference (guestId) | secondary key (the service layer always adds the workspace filter) | on first start |
 | Conversation | `stayId:1` | - | lookup by reference (stayId) | secondary key (the service layer always adds the workspace filter) | on first start |
 | Conversation | `workspaceId:1, updatedAt:-1` | - | workspace-scoped list / filter / sort | workspace-prefixed | on first start |

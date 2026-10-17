@@ -88,7 +88,7 @@ try {
   check("A2 a protected API with no token is 401", noTok.status === 401);
   const prop = await call("POST", "/properties", "adminA", { workspaceId: A, name: "ATLAS-SMOKE Property", code: "ASMK" });
   const unit = await call("POST", "/units", "adminA", { workspaceId: A, propertyId: prop.d?._id, unitNumber: "S-1" });
-  const guest = await call("POST", "/guests", "adminA", { workspaceId: A, firstName: "ATLAS-SMOKE", lastName: "Guest" });
+  const guest = await call("POST", "/guests", "adminA", { workspaceId: A, propertyId: prop.d?._id, firstName: "ATLAS-SMOKE", lastName: "Guest" });
   const stay = await call("POST", "/stays", "adminA", { workspaceId: A, guestId: guest.d?._id, propertyId: prop.d?._id, unitId: unit.d?._id, checkIn: new Date().toISOString(), checkOut: new Date(Date.now() + 86400000).toISOString(), status: "checked_in" });
   const sig = await call("POST", "/signals", "adminA", { workspaceId: A, propertyId: prop.d?._id, unitId: unit.d?._id, guestId: guest.d?._id, stayId: stay.d?._id, type: "maintenance", severity: "medium", title: "ATLAS-SMOKE maintenance signal", description: "Synthetic signal for the Atlas CRUD smoke test." });
   check("C-INSERT Property, Unit, Guest, Stay and Signal were created through the API", [prop, unit, guest, stay, sig].every((r) => r.status === 201), [prop, unit, guest, stay, sig].map((r) => r.status).join("/"));

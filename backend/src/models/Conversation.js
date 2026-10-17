@@ -14,6 +14,14 @@ const conversationSchema = new mongoose.Schema(
       trim: true,
       default: undefined,
     },
+    // The operational context an investigation was started with (Property -> Guest -> Stay). Set once, from the verified selection at the first intake turn;
+    // later turns reuse it. Stable references only: names are always read from the records themselves.
+    propertyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Property",
+      default: undefined,
+      index: true,
+    },
     guestId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Guest",

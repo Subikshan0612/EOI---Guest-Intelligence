@@ -511,3 +511,38 @@
 .safety-refusal-note {
   margin-top: var(--space-4);
 }
+
+/* ---- operational context (Property -> Guest -> Stay), chosen before the issue is described ------------------------------ */
+.asst-context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.asst-context .op-field-input:disabled {
+  background: var(--color-surface-muted, transparent);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.asst-context-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.asst-context-notes .asst-note:empty {
+  display: none;
+}
+
+.asst-context-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-16) var(--space-24);
+  margin: 0;
+}
+
+.asst-context-list dd {
+  margin: var(--space-4) 0 0;
+  font-weight: var(--font-weight-semibold);
+}

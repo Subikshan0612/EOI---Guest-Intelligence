@@ -7,7 +7,16 @@ const MAX = 1000; // mirrors the server's bound (backend signalInterpreter.js IN
  * The operator's input. One turn at a time: while a turn is being sent the button and Enter are inert. Enter sends, Shift+Enter adds a line. The text is only
  * ever sent to the server's intake; nothing here calls the AI (the page asks for the assessment after the server has recorded the report).
  */
-export default function Composer({ onSend, busy, error, disabled }) {
+export default function Composer({
+  onSend,
+  busy,
+  error,
+  disabled,
+  label = "Ask about an operational situation",
+  submitLabel = "Send",
+  placeholder = "For example: Room 204's AC is not cooling. What should we do?",
+  hint = "Say where it happened and what happened. EOI assesses it against your property, guest and stay records and your operating guidance. It recommends; you decide.",
+}) {
   const [text, setText] = useState("");
   const field = useRef(null);
 
@@ -21,9 +30,9 @@ export default function Composer({ onSend, busy, error, disabled }) {
   };
 
   return (
-    <form className="asst-composer" onSubmit={submit} aria-label="Ask about an operational situation">
+    <form className="asst-composer" onSubmit={submit} aria-label={label}>
       <label className="asst-composer-label" htmlFor="asst-input">
-        Ask about an operational situation
+        {label}
       </label>
       <div className="asst-composer-row">
         <textarea
@@ -33,7 +42,7 @@ export default function Composer({ onSend, busy, error, disabled }) {
           rows={2}
           maxLength={MAX}
           value={text}
-          placeholder="For example: Room 204's AC is not cooling. What should we do?"
+          placeholder={placeholder}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) submit(event);
@@ -44,11 +53,11 @@ export default function Composer({ onSend, busy, error, disabled }) {
         />
         <button type="submit" className="primary-button asst-send" disabled={busy || disabled || text.trim().length === 0}>
           <Send size={16} strokeWidth={1.75} aria-hidden="true" />
-          {busy ? "Sending…" : "Send"}
+          {busy ? "Sending…" : submitLabel}
         </button>
       </div>
       <p className="muted asst-note" id="asst-input-hint">
-        Say where it happened and what happened. EOI assesses it against your property, guest and stay records and your operating guidance. It recommends; you decide.
+        {hint}
       </p>
       <p className="op-form-error" id="asst-input-error" role="alert">
         {error ?? ""}

@@ -182,7 +182,7 @@ function recordDetail(key, context) {
   if (key === "stay" && context?.stay?.available) {
     const dates = [context.stay.checkIn ? formatStayDate(context.stay.checkIn) : null, context.stay.checkOut ? formatStayDate(context.stay.checkOut) : null].filter(Boolean).join(" – ");
     const status = context.stay.status ? formatStatusLabel(context.stay.status) : "";
-    return [status, dates].filter(Boolean).join(" · ") || "on record";
+    return [context.stay.reservationId ? `#${context.stay.reservationId}` : null, status, dates].filter(Boolean).join(" · ") || "on record";
   }
   return "on record";
 }

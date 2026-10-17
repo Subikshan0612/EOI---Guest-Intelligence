@@ -234,11 +234,17 @@ export function createMessage(conversationId, workspaceId, payload) {
 /**
  * One operator turn of the conversational Signal intake (Phase 47): `POST /api/conversations/intake`. The server records a Signal from what the operator
  * described (or asks ONE clarifying question) and stores both messages. It never calls the AI service: generation is only `analyzeSignal`, on an explicit click.
- * Only the text, the (optional) conversation and the workspace SELECTOR are sent: no role, user or permission, ever.
+ * Only the text, the (optional) conversation, the workspace SELECTOR and - when the operator chose it before describing the issue - the operational context SELECTION
+ * ({ propertyId, guestId?, stayId? }) are sent: no role, user or permission, ever. The ids in `context` are only a selection: the server loads each record inside the verified
+ * workspace and checks how they relate (guest -> property, stay -> property and guest) before anything is created.
  */
-export function submitIntakeTurn(workspaceId, conversationId, content) {
+export function submitIntakeTurn(workspaceId, conversationId, content, context) {
   return request(
-    api.post(koiEndpoints.conversationIntake, { workspaceId, ...(conversationId ? { conversationId } : {}), content }, { authenticated: true }),
+    api.post(
+      koiEndpoints.conversationIntake,
+      { workspaceId, ...(conversationId ? { conversationId } : {}), ...(context && context.propertyId ? { context } : {}), content },
+      { authenticated: true },
+    ),
   ).then(itemOf);
 }
 

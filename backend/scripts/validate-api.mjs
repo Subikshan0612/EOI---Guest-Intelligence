@@ -236,6 +236,7 @@ async function main() {
     "/guests",
     {
       workspaceId,
+      propertyId,
       firstName: "Evan",
       lastName: "Chen",
       email: `evan-${stamp}@example.com`,
@@ -487,7 +488,7 @@ async function main() {
     "iso: guest B create",
     "POST",
     "/guests",
-    { workspaceId: wsB, firstName: "Bianca", lastName: "Bauer" },
+    { workspaceId: wsB, propertyId: propB, firstName: "Bianca", lastName: "Bauer" },
     201,
   );
   const guestB = trackCreated(guestBRes, "guestIds");
@@ -654,7 +655,7 @@ async function main() {
     "3B disposable guest create",
     "POST",
     "/guests",
-    { workspaceId: wsA, firstName: "Temp", lastName: "Guest" },
+    { workspaceId: wsA, propertyId, firstName: "Temp", lastName: "Guest" },
     201,
   );
   const disposableGuestId = trackCreated(disposableGuestRes, "guestIds");
@@ -927,11 +928,12 @@ async function main() {
     "signalIds",
   );
 
+  // A guest belongs to ONE property: this second guest is at a DIFFERENT property (propA2) than the first, so it stays unrelated to the first guest's property in the history tests below.
   const guestA2Res = await expectStatus(
     "3C second guest in A",
     "POST",
     "/guests",
-    { workspaceId: wsA, firstName: "Second", lastName: "Guest" },
+    { workspaceId: wsA, propertyId: propA2, firstName: "Second", lastName: "Guest" },
     201,
   );
   const guestA2 = trackCreated(guestA2Res, "guestIds");
@@ -1088,7 +1090,7 @@ async function main() {
     "3D: ghost guest create",
     "POST",
     "/guests",
-    { workspaceId: wsA, firstName: "Ghost", lastName: "Guest" },
+    { workspaceId: wsA, propertyId, firstName: "Ghost", lastName: "Guest" },
     201,
   );
   const ghostGuestId = ghostGuestRes.json?.data?._id;
@@ -1131,7 +1133,9 @@ async function main() {
     201,
   );
   const ghostSignalPId = trackCreated(ghostSignalPRes, "signalIds");
-  await expectStatus("3D: delete ghost property", "DELETE", `/properties/${ghostPropId}?workspaceId=${wsA}`, null, 200);
+  // The API now refuses to delete a property that still has records (PROPERTY_HAS_RECORDS); a dangling reference is therefore produced the way an older record would have it: directly.
+  await expectStatus("3D: deleting a property that still has a report is refused", "DELETE", `/properties/${ghostPropId}?workspaceId=${wsA}`, null, 409);
+  await Property.deleteOne({ _id: ghostPropId });
   const ghostPropCtxRes = await expectStatus(
     "3D: context survives deleted property",
     "GET",
@@ -1190,7 +1194,7 @@ async function main() {
     "3D: ghost-stay guest create",
     "POST",
     "/guests",
-    { workspaceId: wsA, firstName: "Stay", lastName: "Ghost" },
+    { workspaceId: wsA, propertyId, firstName: "Stay", lastName: "Ghost" },
     201,
   );
   const ghostStayGuestId = trackCreated(ghostStayGuestRes, "guestIds");
@@ -1400,7 +1404,7 @@ async function main() {
     "3D: priority-test guest create",
     "POST",
     "/guests",
-    { workspaceId: wsA, firstName: "Priority", lastName: "Test" },
+    { workspaceId: wsA, propertyId: priPropertyId, firstName: "Priority", lastName: "Test" },
     201,
   );
   const priGuestId = trackCreated(priGuestRes, "guestIds");

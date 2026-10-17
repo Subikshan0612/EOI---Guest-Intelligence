@@ -15,6 +15,7 @@ import { describeTurnFailure, mapConversation, mapMessages, mapTurn } from "./as
  */
 export function useAssistantConversation(routeConversationId) {
   const [conversationId, setConversationId] = useState(routeConversationId ?? null);
+  const [conversation, setConversation] = useState(null); // the stored conversation (its title and the operational context it was started with)
   const [messages, setMessages] = useState([]);
   const [status, setStatus] = useState(routeConversationId ? "loading" : "new");
   const [sending, setSending] = useState(false);
@@ -33,7 +34,9 @@ export function useAssistantConversation(routeConversationId) {
         koiApi.getConversation(id, KOI_WORKSPACE_ID),
         koiApi.listMessages(id, KOI_WORKSPACE_ID, { limit: 200 }),
       ]);
-      if (!mapConversation(conversation)) throw new Error("malformed");
+      const mapped = mapConversation(conversation);
+      if (!mapped) throw new Error("malformed");
+      setConversation(mapped);
       setMessages(mapMessages(page.items));
       loadedFor.current = id;
       setStatus("ready");
@@ -46,6 +49,7 @@ export function useAssistantConversation(routeConversationId) {
     setSendError(null);
     if (!routeConversationId) {
       setConversationId(null);
+      setConversation(null);
       setMessages([]);
       loadedFor.current = null;
       setStatus(isWorkspaceConfigured ? "new" : "unconfigured");
@@ -57,16 +61,18 @@ export function useAssistantConversation(routeConversationId) {
   }, [routeConversationId, load]);
 
   const send = useCallback(
-    async (text) => {
+    async (text, context) => {
       const content = typeof text === "string" ? text.trim() : "";
       if (!content || sendingRef.current || !isWorkspaceConfigured) return null;
       sendingRef.current = true;
       setSending(true);
       setSendError(null);
       try {
-        const turn = mapTurn(await koiApi.submitIntakeTurn(KOI_WORKSPACE_ID, conversationId, content));
+        // The selected operational context travels only with the FIRST turn (it creates the investigation); a later turn reuses what the server stored.
+        const turn = mapTurn(await koiApi.submitIntakeTurn(KOI_WORKSPACE_ID, conversationId, content, conversationId ? undefined : context));
         loadedFor.current = turn.conversation.id;
         setConversationId(turn.conversation.id);
+        setConversation(turn.conversation);
         setMessages((current) => [...current, ...turn.messages]);
         setStatus("ready");
         return turn;
@@ -81,5 +87,5 @@ export function useAssistantConversation(routeConversationId) {
     [conversationId],
   );
 
-  return { conversationId, messages, status, sending, sendError, send, reload: () => (conversationId ? load(conversationId) : undefined) };
+  return { conversationId, conversation, messages, status, sending, sendError, send, reload: () => (conversationId ? load(conversationId) : undefined) };
 }

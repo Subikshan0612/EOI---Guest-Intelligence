@@ -20,6 +20,7 @@ import {
   requireFields,
   toPlain,
 } from "./queryHelpers.js";
+import { resolveOperationalScope } from "./operationalScope.js";
 
 const UPDATABLE = ["userId", "guestId", "stayId", "signalIds", "title", "status"];
 
@@ -49,13 +50,16 @@ function checkedSignalIds(value) {
   return value;
 }
 
-async function validateConversationRefs(workspaceId, { guestId, stayId, signalIds }) {
-  if (guestId) {
+async function validateConversationRefs(workspaceId, { propertyId, guestId, stayId, signalIds }) {
+  if (propertyId) {
+    // A conversation that carries a property carries a verified operational context: its guest and stay must belong to that property (and the stay to that guest).
+    await resolveOperationalScope(workspaceId, { propertyId, guestId, stayId });
+  } else if (guestId) {
     const guest = await findByIdOr404(Guest, guestId, "Guest");
     assertSameWorkspace(guest, workspaceId, "Guest");
   }
 
-  if (stayId) {
+  if (!propertyId && stayId) {
     const stay = await findByIdOr404(Stay, stayId, "Stay");
     assertSameWorkspace(stay, workspaceId, "Stay");
   }
@@ -77,6 +81,7 @@ export async function createConversation(body) {
   const workspaceId = requireObjectId(body.workspaceId, "workspaceId");
   await assertExists(Workspace, workspaceId, "Workspace");
 
+  const propertyId = parseObjectId(body.propertyId, "propertyId");
   const guestId = parseObjectId(body.guestId, "guestId");
   const stayId = parseObjectId(body.stayId, "stayId");
   const signalIds = Array.isArray(checkedSignalIds(body.signalIds))
@@ -85,11 +90,12 @@ export async function createConversation(body) {
   const title = checkedTitle(body.title);
   const userId = checkedUserId(body.userId);
 
-  await validateConversationRefs(workspaceId, { guestId, stayId, signalIds });
+  await validateConversationRefs(workspaceId, { propertyId, guestId, stayId, signalIds });
 
   const conversation = await Conversation.create({
     workspaceId,
     userId,
+    propertyId,
     guestId,
     stayId,
     signalIds,
@@ -147,6 +153,7 @@ export async function updateConversation(id, body, workspaceId) {
   }
 
   await validateConversationRefs(conversation.workspaceId, {
+    propertyId: conversation.propertyId, // the property an investigation started with is fixed (not updatable); a new guest or stay must still belong to it
     guestId: updates.guestId ?? conversation.guestId,
     stayId: updates.stayId ?? conversation.stayId,
     signalIds: updates.signalIds ?? conversation.signalIds,

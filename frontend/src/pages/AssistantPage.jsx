@@ -3,11 +3,39 @@ import { Link, NavLink, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import RetryButton from "../components/auth/RetryButton";
 import Composer from "../features/assistant/Composer";
+import ContextSelector from "../features/assistant/ContextSelector";
+import InvestigationContext from "../features/assistant/InvestigationContext";
+import { useContextSelection } from "../features/assistant/useContextSelection";
+import { useInvestigationContext } from "../features/assistant/useInvestigationContext";
 import SignalCaseCard from "../features/assistant/SignalCaseCard";
 import { INTAKE_OUTCOME } from "../features/assistant/assistantMapping";
 import { useAssistantConversation } from "../features/assistant/useAssistantConversation";
 import { useCaseGeneration } from "../features/assistant/useCaseGeneration";
 import { useRecentConversations } from "../features/assistant/useRecentConversations";
+
+/**
+ * A NEW investigation starts with its operational context: Property -> Guest -> Stay (all three are required), then the issue. The selection is sent with the first message
+ * only; the server verifies every relationship and stores the context on the investigation, and every later turn reuses it (a started investigation shows its context read-only).
+ */
+function NewInvestigation({ onSend, busy, error }) {
+  const context = useContextSelection();
+  const ready = Boolean(context.context);
+  return (
+    <>
+      <ContextSelector context={context} />
+      <Composer
+        onSend={(content) => onSend(content, context.context)}
+        busy={busy}
+        error={error}
+        disabled={!ready}
+        label="What should EOI investigate?"
+        submitLabel="Start investigation"
+        placeholder={ready ? "Describe the operational issue, for example: AC is not cooling." : "Select a property, guest and stay first."}
+        hint="Describe what happened. EOI assesses it against the property, guest and stay you selected, that property's records and your operating guidance. It recommends; you decide."
+      />
+    </>
+  );
+}
 
 /**
  * Assistant (Phase 52): the operator's way into EOI - an operational decision-support workspace, NOT a general chatbot and not a source of truth.
@@ -22,7 +50,8 @@ import { useRecentConversations } from "../features/assistant/useRecentConversat
 export default function AssistantPage() {
   const { conversationId: routeId } = useParams();
   const navigate = useNavigate();
-  const { messages, status, sending, sendError, send, reload } = useAssistantConversation(routeId);
+  const { conversation, messages, status, sending, sendError, send, reload } = useAssistantConversation(routeId);
+  const investigationContext = useInvestigationContext(conversation);
   const generation = useCaseGeneration();
   const recent = useRecentConversations();
   const endRef = useRef(null);
@@ -31,8 +60,8 @@ export default function AssistantPage() {
     endRef.current?.scrollIntoView?.({ block: "end" });
   }, [messages.length]);
 
-  const onSend = async (content) => {
-    const turn = await send(content);
+  const onSend = async (content, selectedContext) => {
+    const turn = await send(content, selectedContext);
     if (turn) {
       recent.refresh();
       if (!routeId) navigate(`/assistant/${turn.conversation.id}`, { replace: true }); // the first turn created the conversation: its address
@@ -74,8 +103,9 @@ export default function AssistantPage() {
             </div>
           ) : (
             <>
+              <InvestigationContext context={investigationContext} />
               <ol className="asst-thread" role="log" aria-label="Conversation messages" aria-live="polite">
-                {messages.length === 0 ? (
+                {messages.length === 0 && status !== "new" ? (
                   <li className="asst-empty muted">
                     Nothing asked yet. Say where it happened and what happened - for example the room, and what the guest reported.
                   </li>
@@ -99,7 +129,11 @@ export default function AssistantPage() {
                 ))}
                 <li ref={endRef} aria-hidden="true" className="asst-end" />
               </ol>
-              <Composer onSend={onSend} busy={sending} error={sendError} disabled={status === "unconfigured"} />
+              {status === "new" ? (
+                <NewInvestigation onSend={onSend} busy={sending} error={sendError} />
+              ) : (
+                <Composer onSend={(content) => onSend(content)} busy={sending} error={sendError} disabled={status === "unconfigured"} />
+              )}
             </>
           )}
         </section>

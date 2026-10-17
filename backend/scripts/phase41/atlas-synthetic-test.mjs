@@ -69,7 +69,7 @@ try {
   const prop = await call("POST", "/properties", "adminA", { workspaceId: A, name: "P41-SYNTHETIC Property", code: "P41A" });
   check("A3 INSERT through the API (Property)", prop.status === 201, `${prop.status}`);
   const unit = await call("POST", "/units", "adminA", { workspaceId: A, propertyId: prop.d?._id, unitNumber: "P41-1" });
-  const guest = await call("POST", "/guests", "adminA", { workspaceId: A, firstName: "P41-SYNTHETIC", lastName: "Guest" });
+  const guest = await call("POST", "/guests", "adminA", { workspaceId: A, propertyId: prop.d?._id, firstName: "P41-SYNTHETIC", lastName: "Guest" });
   const stay = await call("POST", "/stays", "adminA", { workspaceId: A, guestId: guest.d?._id, propertyId: prop.d?._id, unitId: unit.d?._id, checkIn: new Date().toISOString(), checkOut: new Date(Date.now() + 86400000).toISOString(), status: "checked_in" });
   const sig = await call("POST", "/signals", "adminA", { workspaceId: A, propertyId: prop.d?._id, unitId: unit.d?._id, guestId: guest.d?._id, stayId: stay.d?._id, type: "maintenance", severity: "medium", title: "P41-SYNTHETIC maintenance signal", description: "synthetic" });
   check("A4 INSERT (Unit, Guest, Stay, Signal) through the API", [unit, guest, stay, sig].every((r) => r.status === 201), [unit, guest, stay, sig].map((r) => r.status).join("/"));

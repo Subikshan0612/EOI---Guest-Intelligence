@@ -128,21 +128,26 @@ async function resolveUnit(unitId, workspaceId) {
   return mapUnitFact(unitDoc);
 }
 
-/** A guest's short, most-recent stay history — a handful of stays, not a full ledger. */
-async function fetchGuestRecentStays(guestId, workspaceId) {
-  const stays = await Stay.find({ workspaceId, guestId })
+/**
+ * A guest's short, most-recent stay history — a handful of stays, not a full ledger. When the Signal's property is known the history is that property's only
+ * (Workspace -> Property -> Guest -> Stay): the stays another property recorded for a guest never reach the context.
+ */
+async function fetchGuestRecentStays(guestId, workspaceId, propertyId) {
+  const stays = await Stay.find({ workspaceId, guestId, ...(propertyId ? { propertyId } : {}) })
     .sort({ checkIn: -1 })
     .limit(GUEST_STAY_HISTORY_LIMIT);
   return stays.map(mapStayFact);
 }
 
-async function resolveGuest(guestId, workspaceId) {
+async function resolveGuest(guestId, workspaceId, propertyId) {
   if (!guestId) return null;
   const [doc, recentStays] = await Promise.all([
     Guest.findOne({ _id: guestId, workspaceId }),
-    fetchGuestRecentStays(guestId, workspaceId),
+    fetchGuestRecentStays(guestId, workspaceId, propertyId),
   ]);
   if (!doc) return { ...unavailable(guestId), recentStays };
+  // A guest recorded under a DIFFERENT property than the Signal's is not part of this Signal's context (an older record that disagrees is unavailable, never mixed in).
+  if (propertyId && doc.propertyId && String(doc.propertyId) !== String(propertyId)) return { ...unavailable(guestId), recentStays: [] };
   return {
     id: String(doc._id),
     available: true,
@@ -222,7 +227,7 @@ export async function assembleSignalContext(signalId, workspaceId) {
   const [property, unit, guest, stay, history] = await Promise.all([
     resolveProperty(signal.propertyId, scope),
     resolveUnit(signal.unitId, scope),
-    resolveGuest(signal.guestId, scope),
+    resolveGuest(signal.guestId, scope, signal.propertyId),
     resolveStay(signal.stayId, scope),
     assembleHistory(signal, scope),
   ]);

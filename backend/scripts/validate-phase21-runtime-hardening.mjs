@@ -247,7 +247,8 @@ async function main() {
     check("RL7 NO BYPASS: a POST naming another workspace in the BODY is 429 before any lookup", r.status === 429);
     // write tier
     const operatorZ = await mk("operator", wsA, "p21-z");
-    const guestBody = (n) => ({ workspaceId: A, firstName: `P21w${n}`, lastName: "Limit", email: `p21w${n}-${stamp}@example.invalid` });
+    const limitProperty = await Property.create({ workspaceId: wsA._id, name: `P21 limit ${stamp}`, code: `P21L-${stamp}` });
+    const guestBody = (n) => ({ workspaceId: A, propertyId: String(limitProperty._id), firstName: `P21w${n}`, lastName: "Limit", email: `p21w${n}-${stamp}@example.invalid` });
     const writes = [];
     for (let i = 1; i <= 3; i += 1) writes.push((await api(P.limits, "POST", "/guests", H(operatorZ), guestBody(i))).status);
     check("RW1 WRITE tier: 3 writes at WRITE_MAX=3 succeed (201)", writes.every((s) => s === 201), writes.join(","));
@@ -382,8 +383,8 @@ async function main() {
     const PB = await Property.create({ workspaceId: wsB._id, name: `P21 PB ${stamp}`, code: `P21B-${stamp}` });
     const UA = await Unit.create({ propertyId: PA._id, unitNumber: `UA-${stamp}` });
     const UB = await Unit.create({ propertyId: PB._id, unitNumber: `UB-${stamp}` });
-    const GA = await Guest.create({ workspaceId: wsA._id, firstName: "P21", lastName: "GuestA" });
-    const GB = await Guest.create({ workspaceId: wsB._id, firstName: "P21", lastName: "GuestB" });
+    const GA = await Guest.create({ workspaceId: wsA._id, propertyId: PA._id, firstName: "P21", lastName: "GuestA" });
+    const GB = await Guest.create({ workspaceId: wsB._id, propertyId: PB._id, firstName: "P21", lastName: "GuestB" });
     const SA = await Stay.create({ workspaceId: wsA._id, guestId: GA._id, propertyId: PA._id, unitId: UA._id, reservationId: `P21-SA-${stamp}`, status: "confirmed", checkIn: new Date("2036-01-01"), checkOut: new Date("2036-01-03") });
     const SB = await Stay.create({ workspaceId: wsB._id, guestId: GB._id, propertyId: PB._id, unitId: UB._id, reservationId: `P21-SB-${stamp}`, status: "confirmed", checkIn: new Date("2036-01-01"), checkOut: new Date("2036-01-03") });
     const SigA = await Signal.create({ workspaceId: wsA._id, type: "maintenance", title: `P21 SigA ${stamp}` });
