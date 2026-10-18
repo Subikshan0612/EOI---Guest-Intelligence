@@ -4,12 +4,15 @@ import { emailProblem, nameProblem, newPasswordProblem, normalizeEmailInput } fr
 import { eoiAuth } from "../../services/auth/eoiAuthClient";
 import AuthField from "./AuthField";
 import GoogleButton from "./GoogleButton";
+import { authShell } from "./authShell";
 
 /**
  * /signup - "Create your EOI account": full name, email, password + confirmation, and "Continue with Google". The account is created UNVERIFIED and the person is
  * told to check their email; they cannot sign in until the link has been opened. The answer is the same whether or not the address already has an account.
  */
-export default function SignUpPage() {
+export default function SignUpPage({ embedded = false }) {
+  const { Wrapper, wrapperProps, Heading, focusOptions } = authShell(embedded);
+  const cardClass = embedded ? "koi-card auth-card auth-card-embedded" : "koi-card auth-card";
   const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState("");
@@ -20,7 +23,7 @@ export default function SignUpPage() {
   const refs = { name: useRef(null), email: useRef(null), password: useRef(null), confirm: useRef(null) };
   const sending = useRef(false);
   useEffect(() => {
-    heading.current?.focus();
+    heading.current?.focus(focusOptions);
   }, [sentTo]);
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -60,12 +63,12 @@ export default function SignUpPage() {
 
   if (sentTo) {
     return (
-      <main className="auth-screen">
-        <section className="koi-card auth-card" aria-labelledby="signup-sent-title">
+      <Wrapper {...wrapperProps}>
+        <section className={cardClass} aria-labelledby="signup-sent-title">
           <p className="auth-brand">EOI</p>
-          <h1 className="page-title" id="signup-sent-title" ref={heading} tabIndex={-1}>
+          <Heading className="page-title" id="signup-sent-title" ref={heading} tabIndex={-1}>
             Check your email
-          </h1>
+          </Heading>
           <p className="page-lead" role="status">
             We&apos;ve sent a link to confirm your email address. Open it to finish creating your account, then sign in.
           </p>
@@ -84,17 +87,17 @@ export default function SignUpPage() {
             Back to sign in
           </Link>
         </section>
-      </main>
+      </Wrapper>
     );
   }
 
   return (
-    <main className="auth-screen">
-      <section className="koi-card auth-card" aria-labelledby="signup-title">
+    <Wrapper {...wrapperProps}>
+      <section className={cardClass} aria-labelledby="signup-title">
         <p className="auth-brand">EOI</p>
-        <h1 className="page-title" id="signup-title" ref={heading} tabIndex={-1}>
+        <Heading className="page-title" id="signup-title" ref={heading} tabIndex={-1}>
           Create your EOI account
-        </h1>
+        </Heading>
         <p className="page-lead">Set up your account to continue to EOI.</p>
         <form className="auth-form" onSubmit={submit} noValidate aria-busy={busy ? "true" : undefined}>
           <AuthField id="signup-name" label="Full name" value={form.name} onChange={set("name")} error={errors.name} autoComplete="name" disabled={busy} inputRef={refs.name} maxLength={120} />
@@ -124,6 +127,6 @@ export default function SignUpPage() {
           </p>
         </aside>
       </section>
-    </main>
+    </Wrapper>
   );
 }

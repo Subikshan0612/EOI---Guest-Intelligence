@@ -1,0 +1,307 @@
+/*
+ * The public welcome page (features/landing): the product story beside the existing sign-in card. Built only on the existing tokens (tokens.css) - same palette, same type,
+ * same radii and shadows. Restrained on purpose: a faint grid and two soft washes for depth, no images, no moving background. Motion is a short entrance (<= 500ms) that
+ * reveals the story top to bottom and then the card; every animation is switched off by prefers-reduced-motion (global.css, and again at the end of this file).
+ */
+.landing {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background: var(--color-bg);
+}
+
+/* ---- background: two soft washes of the existing accents and a faint operational grid that fades away from the top left ------------------------------------- */
+.landing-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(54rem 34rem at 8% -6%, var(--color-accent-soft), transparent 70%),
+    radial-gradient(40rem 28rem at 100% 104%, color-mix(in srgb, var(--color-accent-gold) 13%, transparent), transparent 70%);
+}
+
+.landing-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--color-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
+  background-size: 3.5rem 3.5rem;
+  opacity: 0.5;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 28% 22%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 60% at 28% 22%, #000 0%, transparent 75%);
+}
+
+/* ---- layout ------------------------------------------------------------------------------------------------------------------------------------------- */
+.landing-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: var(--space-32) var(--space-16) var(--space-48);
+}
+
+.landing-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-40);
+  width: 100%;
+  max-width: 76rem;
+  margin: 0 auto;
+}
+
+.landing-auth {
+  width: 100%;
+  min-width: 0;
+  max-width: 32rem;
+  margin: 0 auto;
+}
+
+.landing-auth:focus {
+  outline: none;
+}
+
+@media (min-width: 48rem) {
+  .landing-inner {
+    padding: var(--space-48) var(--space-32) var(--space-64);
+  }
+}
+
+@media (min-width: 64rem) {
+  .landing-inner {
+    align-items: center;
+    padding-top: var(--space-32);
+    padding-bottom: var(--space-32);
+  }
+
+  .landing-main {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 28.5rem);
+    gap: var(--space-64);
+    align-items: center;
+  }
+
+  .landing-auth {
+    max-width: none;
+    margin: 0;
+  }
+}
+
+/* ---- the story -------------------------------------------------------------------------------------------------------------------------------------- */
+.landing-story {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  min-width: 0;
+}
+
+.landing-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.landing-brand-mark {
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.landing-brand-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.landing-title {
+  margin: 0;
+  max-width: 20ch;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 1rem + 2.6vw, 3.25rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.08;
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+}
+
+.landing-lead {
+  margin: 0;
+  max-width: 36rem;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-body);
+}
+
+.landing-note {
+  max-width: 36rem;
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-16);
+  border-top: var(--border-width) solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* ---- the workflow: Signal -> Context -> Intelligence -> Decision -> Action -> Outcome ------------------------------------------------------------------------ */
+.landing-flow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-8);
+  max-width: 36rem;
+  margin: var(--space-4) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-flow-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-width: 0;
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-elevated) 82%, transparent);
+  box-shadow: var(--shadow-sm);
+  animation: landing-in 420ms var(--ease-out) backwards; /* backwards: the hover transform is not pinned by a finished animation */
+  animation-delay: calc(240ms + var(--i, 0) * 70ms);
+  transition: border-color var(--ease), background var(--ease), transform var(--duration) var(--ease-out);
+}
+
+.landing-flow-node {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  transition: background var(--ease), color var(--ease);
+}
+
+.landing-flow-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.landing-flow-label {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.landing-flow-text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+@media (hover: hover) {
+  .landing-flow-step:hover {
+    border-color: var(--color-accent);
+    background: var(--color-elevated);
+    transform: translateX(2px);
+  }
+
+  .landing-flow-step:hover .landing-flow-node {
+    background: var(--color-accent);
+    color: var(--color-text-inverse);
+  }
+}
+
+/* A vertical timeline when the story has its own column: each stage joined to the next by a short rail. */
+@media (min-width: 64rem) {
+  .landing-flow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .landing-flow-step {
+    position: relative;
+    padding: var(--space-8) var(--space-16) var(--space-8) var(--space-12);
+  }
+
+  .landing-flow-step:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: calc(var(--space-12) + 1.125rem - 1px);
+    top: 100%;
+    width: 2px;
+    height: var(--space-8);
+    background: var(--color-border-strong);
+  }
+}
+
+/* A compact grid on a phone: the six stages as short labelled chips, in order. */
+@media (max-width: 40rem) {
+  .landing-flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .landing-flow-text {
+    display: none;
+  }
+
+  .landing-flow-node {
+    width: 2rem;
+    height: 2rem;
+  }
+}
+
+/* ---- entrance ------------------------------------------------------------------------------------------------------------------------------------------ */
+@keyframes landing-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.landing-reveal {
+  animation: landing-in 460ms var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+/* ---- the sign-in card, on the welcome page ------------------------------------------------------------------------------------------------------------- */
+/* The brand is already on the left, so the card does not repeat it; the card is a little more raised than on the stand-alone screens and enters after the story begins. */
+.landing .auth-card-embedded {
+  max-width: none;
+  box-shadow: var(--shadow-lg);
+  animation-delay: 180ms;
+}
+
+.landing .auth-card-embedded .auth-brand {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  .landing .auth-card-embedded {
+    padding: var(--space-24) var(--space-20);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-reveal,
+  .landing-flow-step,
+  .landing .auth-card-embedded {
+    animation: none !important;
+  }
+
+  .landing-flow-step:hover {
+    transform: none !important;
+  }
+}

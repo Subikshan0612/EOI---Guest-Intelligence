@@ -7,12 +7,14 @@ import { eoiAuth } from "../../services/auth/eoiAuthClient";
 import { adoptSession } from "../../services/auth/oidc/oidcSession";
 import AuthField from "./AuthField";
 import GoogleButton from "./GoogleButton";
+import { authShell } from "./authShell";
 
 /**
  * /signin - email + password, and "Continue with Google" (the SAME EOI session either way). Wording is fixed and plain. A wrong email and a wrong password get the
  * same sentence, so the page can never be used to learn which addresses have accounts. While a request is in flight the form cannot be submitted again.
  */
-export default function SignInPage() {
+export default function SignInPage({ embedded = false, title = "Welcome back" }) {
+  const { Wrapper, wrapperProps, Heading, focusOptions } = authShell(embedded);
   const navigate = useNavigate();
   const { reason } = useAuthSession();
   const [email, setEmail] = useState("");
@@ -27,7 +29,7 @@ export default function SignInPage() {
   const passwordRef = useRef(null);
   const sending = useRef(false);
   useEffect(() => {
-    heading.current?.focus();
+    heading.current?.focus(focusOptions);
   }, []);
 
   const submit = async (event) => {
@@ -66,12 +68,12 @@ export default function SignInPage() {
   };
 
   return (
-    <main className="auth-screen">
-      <section className="koi-card auth-card" aria-labelledby="signin-title">
+    <Wrapper {...wrapperProps}>
+      <section className={embedded ? "koi-card auth-card auth-card-embedded" : "koi-card auth-card"} aria-labelledby="signin-title">
         <p className="auth-brand">EOI</p>
-        <h1 className="page-title" id="signin-title" ref={heading} tabIndex={-1}>
-          Welcome back
-        </h1>
+        <Heading className="page-title" id="signin-title" ref={heading} tabIndex={-1}>
+          {title}
+        </Heading>
         {reason === "signedOut" ? (
           <p className="page-lead" role="status">
             You have signed out. Sign in to continue.
@@ -119,6 +121,6 @@ export default function SignInPage() {
           </p>
         </aside>
       </section>
-    </main>
+    </Wrapper>
   );
 }

@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { emailProblem, normalizeEmailInput } from "../../features/auth/validation";
 import { eoiAuth } from "../../services/auth/eoiAuthClient";
 import AuthField from "./AuthField";
+import { authShell } from "./authShell";
 
 /** /forgot-password - always the SAME generic answer, so the page cannot be used to learn which addresses have accounts (or whether an account uses Google). */
-export default function ForgotPasswordPage() {
+export default function ForgotPasswordPage({ embedded = false }) {
+  const { Wrapper, wrapperProps, Heading, focusOptions } = authShell(embedded);
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
@@ -14,7 +16,7 @@ export default function ForgotPasswordPage() {
   const emailRef = useRef(null);
   const sending = useRef(false);
   useEffect(() => {
-    heading.current?.focus();
+    heading.current?.focus(focusOptions);
   }, []);
 
   const submit = async (event) => {
@@ -36,12 +38,12 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <main className="auth-screen">
-      <section className="koi-card auth-card" aria-labelledby="forgot-title">
+    <Wrapper {...wrapperProps}>
+      <section className={embedded ? "koi-card auth-card auth-card-embedded" : "koi-card auth-card"} aria-labelledby="forgot-title">
         <p className="auth-brand">EOI</p>
-        <h1 className="page-title" id="forgot-title" ref={heading} tabIndex={-1}>
+        <Heading className="page-title" id="forgot-title" ref={heading} tabIndex={-1}>
           Reset your password
-        </h1>
+        </Heading>
         {done ? (
           <p className="page-lead" role="status">
             If an account exists for that email, we&apos;ll send instructions to reset your password.
@@ -61,6 +63,6 @@ export default function ForgotPasswordPage() {
           Back to sign in
         </Link>
       </section>
-    </main>
+    </Wrapper>
   );
 }
