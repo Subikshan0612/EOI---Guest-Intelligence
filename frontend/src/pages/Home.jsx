@@ -78,7 +78,12 @@ export default function Home() {
           </ul>
         ) : null}
         {recent.status === "error" ? <p className="muted asst-note">Recent conversations couldn&apos;t be loaded.</p> : null}
-        {recent.status === "ready" && recent.items.length === 0 ? <p className="muted asst-note">None yet. Start by asking the assistant.</p> : null}
+        {recent.status === "ready" && recent.items.length === 0 ? (
+          <div className="home-empty">
+            <MessageSquareText size={20} strokeWidth={1.5} aria-hidden="true" />
+            <p className="muted asst-note">None yet. Start by asking the assistant.</p>
+          </div>
+        ) : null}
         <ul className="home-recent">
           {recent.items.slice(0, 8).map((item) => (
             <li key={item.id}>

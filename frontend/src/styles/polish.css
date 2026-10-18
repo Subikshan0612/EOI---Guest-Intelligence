@@ -47,6 +47,11 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* ---- page measure: the operations pages (lists, forms, details) use a comfortable wider column than the 40rem default ---------------------------------- */
+.op-page:not(.asst-page) {
+  max-width: 52rem;
+}
+
 /* ---- page headings --------------------------------------------------------------------------------------------------- */
 .op-page-header .page-title,
 .page > header .page-title {
@@ -55,6 +60,11 @@
 
 .page-lead {
   line-height: var(--line-body);
+}
+
+.op-page-header .page-lead,
+.page > header .page-lead {
+  margin-top: var(--space-8);
 }
 
 /* ---- buttons --------------------------------------------------------------------------------------------------------- */
@@ -395,13 +405,193 @@ select.op-field-input {
   }
 }
 
-/* ---- Assistant: the sticky composer sits flush at the bottom of the scroll container (no bottom padding for content to show through) ---------------------------- */
-.main-workspace:has(.asst-composer) {
-  padding-bottom: 0;
+/* ---- empty / success / form feedback ----------------------------------------------------------------------------------------- */
+.investigation-state {
+  padding: var(--space-20);
+  border: var(--border-width) dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 
-.asst-composer {
-  padding-bottom: var(--space-16);
+/* One empty state for the app: what this is, why it is empty, what to do next. */
+.empty-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-16);
+  padding: var(--space-40) var(--space-24);
+  border: var(--border-width) dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  text-align: center;
+}
+
+.empty-state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.empty-state-card .empty-state-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-8);
+  max-width: 34rem;
+}
+
+.empty-state-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--line-tight);
+}
+
+.empty-state-what {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.empty-state-why {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.empty-state-action .primary-button {
+  min-height: 2.75rem;
+  padding: 0 var(--space-20);
+}
+
+/* Loading rows shaped like the list rows they stand in for (no data, no numbers). */
+.list-skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-height: 5.3rem; /* the height of a real list row */
+  padding: var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-elevated);
+}
+
+.list-skeleton-icon,
+.list-skeleton-line,
+.list-skeleton-chip {
+  display: block;
+  background: var(--color-border);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.list-skeleton-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+}
+
+.list-skeleton-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.list-skeleton-line {
+  height: 0.75rem;
+  border-radius: var(--radius-full);
+}
+
+.list-skeleton-line:nth-child(1) {
+  width: 38%;
+}
+
+.list-skeleton-line:nth-child(2) {
+  width: 58%;
+  animation-delay: 120ms;
+}
+
+.list-skeleton-chip {
+  width: 6rem;
+  height: 1.4rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  animation-delay: 240ms;
+}
+
+@media (max-width: 40rem) {
+  .list-skeleton-chip {
+    width: 3.5rem;
+  }
+
+  .empty-state-card {
+    padding: var(--space-32) var(--space-16);
+  }
+}
+
+.home-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-16);
+  border: var(--border-width) dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+}
+
+.home-empty .asst-note {
+  margin: 0;
+}
+
+.op-success {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-8);
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-width) solid color-mix(in srgb, var(--color-success) 28%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  animation: alert-in var(--duration) var(--ease-out) both;
+}
+
+.op-form > .op-form-error,
+.op-form-actions + .op-form-error {
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-width) solid color-mix(in srgb, var(--color-danger) 28%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+}
+
+.op-form {
+  gap: var(--space-16);
+}
+
+.op-form-actions {
+  padding-top: var(--space-4);
 }
 
 /* ---- narrower content area ------------------------------------------------------------------------------------------- */
@@ -415,7 +605,14 @@ select.op-field-input {
 @media (prefers-reduced-motion: reduce) {
   .route-view,
   .op-form-error,
-  .skeleton {
+  .op-success,
+  .asst-start-need,
+  .skeleton,
+  .list-skeleton-icon,
+  .list-skeleton-line,
+  .list-skeleton-chip,
+  .asst-pulse,
+  .asst-skeleton > span {
     animation: none !important;
   }
 

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Check, Minus, Sparkles } from "lucide-react";
+import { Check, CircleAlert, FileSearch, Gavel, Lightbulb, ListChecks, Minus, Sparkles, Wrench } from "lucide-react";
 import RetryButton from "../../components/auth/RetryButton";
 import SignInButton from "../../components/auth/SignInButton";
 import { formatStayDate } from "../../utils/formatDate";
@@ -58,13 +58,22 @@ export default function SignalCaseCard({ signalId, severityStated, generation, o
   // The Outcome a PERSON recorded for the APPROVED Action. It only READS until they confirm the form; it never touches the AI and nothing feeds Learning.
   const outcomeState = useCaseOutcome(actionState.action?.status === "approved" ? actionState.action.id : null);
 
-  if (status === "loading") return <p className="muted asst-note" role="status">Loading this report…</p>;
+  if (status === "loading")
+    return (
+      <div className="asst-loading" role="status">
+        <p className="muted asst-note">Loading this report…</p>
+        <span className="asst-skeleton" aria-hidden="true"><span /><span /><span /></span>
+      </div>
+    );
   if (status === "missing") return <p className="muted asst-note">This report is no longer available.</p>;
   if (status === "error" || !signal) {
     return (
-      <p className="asst-note" role="alert">
-        This report could not be loaded. <RetryButton onClick={reload} />
-      </p>
+      <div className="asst-alert" role="alert">
+        <CircleAlert size={18} strokeWidth={1.75} aria-hidden="true" />
+        <p className="asst-note">
+          This report could not be loaded. <RetryButton onClick={reload} />
+        </p>
+      </div>
     );
   }
 
@@ -88,18 +97,29 @@ export default function SignalCaseCard({ signalId, severityStated, generation, o
       <CaseProgress stages={stages} />
 
       <section className="koi-card asst-stage" aria-labelledby={`stage-used-${signalId}`}>
-        <p className="intel-section-label" id={`stage-used-${signalId}`}>What EOI used</p>
+        <p className="intel-section-label asst-stage-label" id={`stage-used-${signalId}`}>
+          <FileSearch size={15} strokeWidth={1.75} aria-hidden="true" />
+          What EOI used
+        </p>
         <p className="asst-signal-title">{signal.title}</p>
         <p className="asst-chips">
           {where ? <span className="status-chip">{where}</span> : null}
           <span className="status-chip" data-tone={signal.type}>{formatStatusLabel(signal.type)}</span>
           {severityStated ? <span className="status-chip" data-tone={signal.severity}>{formatStatusLabel(signal.severity)}</span> : null}
         </p>
-        {contextStatus === "loading" ? <p className="muted asst-note" role="status">Gathering the records…</p> : null}
+        {contextStatus === "loading" ? (
+          <div className="asst-loading" role="status">
+            <p className="muted asst-note">Gathering the records…</p>
+            <span className="asst-skeleton" aria-hidden="true"><span /><span /></span>
+          </div>
+        ) : null}
         {contextStatus === "error" ? (
-          <p className="asst-note" role="alert">
-            The records for this report aren&apos;t available right now (this may need a higher role). <RetryButton onClick={reloadContext} />
-          </p>
+          <div className="asst-alert" role="alert">
+            <CircleAlert size={18} strokeWidth={1.75} aria-hidden="true" />
+            <p className="asst-note">
+              The records for this report aren&apos;t available right now (this may need a higher role). <RetryButton onClick={reloadContext} />
+            </p>
+          </div>
         ) : null}
         {contextStatus === "ready" ? (
           <>
@@ -146,17 +166,25 @@ export default function SignalCaseCard({ signalId, severityStated, generation, o
       <AssessmentSection intel={intel} generation={generation} onGenerate={() => onGenerate?.(signalId)} onRefresh={() => onRefresh?.(signalId)} hazard={isServerHazard(signal)} signalId={signalId} />
 
       {intel.status === "ready" && intel.intelligence ? (
-        <section className="koi-card asst-stage asst-decision" aria-labelledby={`stage-decision-${signalId}`}>
-          <p className="intel-section-label" id={`stage-decision-${signalId}`}>Your decision</p>
+        <section className="koi-card asst-stage asst-governance asst-decision" aria-labelledby={`stage-decision-${signalId}`}>
+          <p className="intel-section-label asst-stage-label" id={`stage-decision-${signalId}`}>
+            <Gavel size={15} strokeWidth={1.75} aria-hidden="true" />
+            Your decision
+            <span className="asst-stage-tag">A person decides</span>
+          </p>
           <DecisionPanel intelligence={intel.intelligence} constraint={safetyConstraint(intel.intelligence.safety)} decisionState={panelDecisionState} />
         </section>
       ) : null}
 
       {intel.status === "ready" && intel.intelligence && decisionState.status === "ready" && decisionState.decision?.status === "approved" ? (
-        <section className="koi-card asst-stage asst-action-stage" aria-labelledby={`stage-action-${signalId}`}>
-          <p className="intel-section-label" id={`stage-action-${signalId}`}>Action</p>
+        <section className="koi-card asst-stage asst-governance asst-action-stage" aria-labelledby={`stage-action-${signalId}`}>
+          <p className="intel-section-label asst-stage-label" id={`stage-action-${signalId}`}>
+            <Wrench size={15} strokeWidth={1.75} aria-hidden="true" />
+            Action
+            <span className="asst-stage-tag">Not executed by EOI</span>
+          </p>
           {preparing ? (
-            <p className="muted asst-note" role="status">Making the action ready…</p>
+            <p className="muted asst-note asst-pending" role="status">Making the action ready…</p>
           ) : (
             <ActionPanel decision={decisionState.decision} constraint={safetyConstraint(intel.intelligence.safety)} actionState={actionState} />
           )}
@@ -164,8 +192,12 @@ export default function SignalCaseCard({ signalId, severityStated, generation, o
       ) : null}
 
       {intel.status === "ready" && intel.intelligence && decisionState.status === "ready" && decisionState.decision?.status === "approved" ? (
-        <section className="koi-card asst-stage asst-outcome-stage" aria-labelledby={`stage-outcome-${signalId}`}>
-          <p className="intel-section-label" id={`stage-outcome-${signalId}`}>Outcome</p>
+        <section className="koi-card asst-stage asst-governance asst-outcome-stage" aria-labelledby={`stage-outcome-${signalId}`}>
+          <p className="intel-section-label asst-stage-label" id={`stage-outcome-${signalId}`}>
+            <ListChecks size={15} strokeWidth={1.75} aria-hidden="true" />
+            Outcome
+            <span className="asst-stage-tag">Reported by a person</span>
+          </p>
           <OutcomePanel action={actionState.action} outcomeState={outcomeState} />
         </section>
       ) : null}
@@ -194,40 +226,60 @@ export function AssessmentSection({ intel, generation, onGenerate, onRefresh, ha
   const { status, intelligence, loadReason, reload } = intel;
   const busy = generation?.busy === true;
   const failure = generation?.failure ?? null;
-  const label = <p className="intel-section-label intel-section-label-intelligence" id={`stage-assessment-${signalId}`}>Assessment</p>;
+  const label = (
+    <p className="intel-section-label intel-section-label-intelligence asst-stage-label" id={`stage-assessment-${signalId}`}>
+      <Sparkles size={15} strokeWidth={1.75} aria-hidden="true" />
+      Assessment
+    </p>
+  );
 
   let body;
   if (status === "ready" && intelligence) {
     body = (
       <>
         <SafetyAssessment safety={intelligence.safety} />
-        <section className="koi-card dash-block" aria-label="Assessment">
+        <section className="koi-card dash-block asst-assessment" aria-label="Assessment">
+          <div className="asst-assessment-meta">
+            <h4 className="card-label">Confidence</h4>
+            <ConfidenceBadge confidence={intelligence.confidence} withExplanation />
+          </div>
           <p className="muted dash-note">Generated by AI from your records and guidance. It is a recommendation for a person to review, not a fact.</p>
           <h4 className="card-label">What is happening</h4>
-          <p className="dash-text">{intelligence.situation}</p>
+          <p className="dash-text asst-lead-text">{intelligence.situation}</p>
           {intelligence.evidence.length ? (
             <>
               <h4 className="card-label">Based on</h4>
-              <ul className="dash-evidence">
+              <ul className="dash-evidence asst-evidence">
                 {intelligence.evidence.map((item, i) => (
                   <li key={i}>{typeof item === "string" ? item : JSON.stringify(item)}</li>
                 ))}
               </ul>
             </>
           ) : null}
-          <h4 className="card-label">Why it matters</h4>
-          <p className="dash-text">{intelligence.impact}</p>
-          <h4 className="card-label">Confidence</h4>
-          <ConfidenceBadge confidence={intelligence.confidence} withExplanation />
+          <div className="asst-callout">
+            <h4 className="card-label">Why it matters</h4>
+            <p className="dash-text">{intelligence.impact}</p>
+          </div>
         </section>
-        <section className="koi-card dash-block" aria-label="Recommendation">
-          <h4 className="card-label">Recommendation</h4>
-          <p className="dash-text">{intelligence.recommendation}</p>
+        <section className="koi-card dash-block asst-recommendation" aria-label="Recommendation">
+          <h4 className="card-label">
+            <Lightbulb size={14} strokeWidth={1.75} aria-hidden="true" />
+            Recommendation
+          </h4>
+          <p className="dash-text asst-lead-text">{intelligence.recommendation}</p>
         </section>
       </>
     );
   } else if (busy) {
-    body = <p className="muted asst-note" role="status">Assessing this against your records and guidance…</p>;
+    body = (
+      <div className="asst-working asst-working-busy">
+        <p className="muted asst-note" role="status">
+          <span className="asst-pulse" aria-hidden="true" />
+          Assessing this against your records and guidance…
+        </p>
+        <span className="asst-skeleton" aria-hidden="true"><span /><span /><span /></span>
+      </div>
+    );
   } else if (generation?.inProgress || generation?.stalled) {
     // Workstream 5B: the analysis is still running. This is NOT a failure and offers no "try again": the request is still being worked on, and the backend decides when it ends.
     // The wording is fixed (analysisAttemptPresentation.js): no percentage, no estimate, no provider detail. For a report the server classified as a safety hazard one sentence
@@ -236,8 +288,12 @@ export function AssessmentSection({ intel, generation, onGenerate, onRefresh, ha
     const unavailable = generation.statusUnavailable;
     body = (
       <div className="asst-working" role="status" aria-live="polite">
-        <p className="asst-working-title">{IN_PROGRESS_TITLE}</p>
+        <p className="asst-working-title">
+          <span className="asst-pulse" aria-hidden="true" />
+          {IN_PROGRESS_TITLE}
+        </p>
         <p className="muted asst-note">{stalled ? STALLED_BODY : unavailable ? STATUS_UNAVAILABLE_BODY : IN_PROGRESS_BODY}</p>
+        <span className="asst-skeleton" aria-hidden="true"><span /><span /><span /></span>
         {hazard ? <p className="asst-hazard-note">{HAZARD_NOTE}</p> : null}
         {stalled || unavailable ? (
           <button type="button" className="text-button" onClick={onRefresh}>
@@ -248,31 +304,42 @@ export function AssessmentSection({ intel, generation, onGenerate, onRefresh, ha
     );
   } else if (failure) {
     body = (
-      <div role="alert">
-        <p className="op-form-error">{failure.title}</p>
-        <p className="muted asst-note">{failure.message}</p>
-        {hazard ? <p className="asst-hazard-note">{HAZARD_NOTE}</p> : null}
-        {failure.retryable ? <RetryButton onClick={onGenerate} /> : null}
+      <div className="asst-alert" role="alert">
+        <CircleAlert size={18} strokeWidth={1.75} aria-hidden="true" />
+        <div className="asst-alert-copy">
+          <p className="op-form-error">{failure.title}</p>
+          <p className="muted asst-note">{failure.message}</p>
+          {hazard ? <p className="asst-hazard-note">{HAZARD_NOTE}</p> : null}
+          {failure.retryable ? <RetryButton onClick={onGenerate} /> : null}
+        </div>
       </div>
     );
   } else if (status === "checking" || generation?.checking) {
-    body = <p className="muted asst-note" role="status">Checking for a saved assessment…</p>;
+    body = (
+      <div className="asst-loading" role="status">
+        <p className="muted asst-note">Checking for a saved assessment…</p>
+        <span className="asst-skeleton" aria-hidden="true"><span /><span /></span>
+      </div>
+    );
   } else if (status === "loadError") {
     body = (
-      <div role="alert">
-        {loadReason === "unauthenticated" ? (
-          <>
-            <p className="op-form-error">Sign in required</p>
-            <SignInButton className="text-button" />
-          </>
-        ) : loadReason === "forbidden" ? (
-          <p className="op-form-error">Your role can&apos;t read assessments in this workspace.</p>
-        ) : (
-          <>
-            <p className="op-form-error">The saved assessment could not be loaded.</p>
-            <RetryButton onClick={reload} />
-          </>
-        )}
+      <div className="asst-alert" role="alert">
+        <CircleAlert size={18} strokeWidth={1.75} aria-hidden="true" />
+        <div className="asst-alert-copy">
+          {loadReason === "unauthenticated" ? (
+            <>
+              <p className="op-form-error">Sign in required</p>
+              <SignInButton className="text-button" />
+            </>
+          ) : loadReason === "forbidden" ? (
+            <p className="op-form-error">Your role can&apos;t read assessments in this workspace.</p>
+          ) : (
+            <>
+              <p className="op-form-error">The saved assessment could not be loaded.</p>
+              <RetryButton onClick={reload} />
+            </>
+          )}
+        </div>
       </div>
     );
   } else {

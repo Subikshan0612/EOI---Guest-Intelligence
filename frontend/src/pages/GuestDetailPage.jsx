@@ -9,6 +9,7 @@ import { formatGuestName, mapPropertyFromApi, mapUnitFromApi } from "../features
 import { KOI_WORKSPACE_ID, isWorkspaceConfigured } from "../config/workspace";
 import * as koiApi from "../services/api";
 import RetryButton from "../components/auth/RetryButton";
+import ListSkeleton from "../components/ui/ListSkeleton";
 
 /**
  * Resolves property/unit names for display in the stay list. Kept local to
@@ -223,7 +224,7 @@ export default function GuestDetailPage() {
         ) : null}
 
         {staysStatus === "loading" ? (
-          <p className="muted">Loading stays…</p>
+          <ListSkeleton label="Loading stays…" rows={2} />
         ) : staysStatus === "error" ? (
           <section className="investigation-state" role="alert">
             <p className="page-lead">{staysError || "Could not load stays."}</p>

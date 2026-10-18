@@ -5,6 +5,8 @@ import PropertyForm from "../features/operations/PropertyForm";
 import { useProperties } from "../features/operations/useProperties";
 import { formatStatusLabel } from "../features/operations/operationsMapping";
 import RetryButton from "../components/auth/RetryButton";
+import EmptyState from "../components/ui/EmptyState";
+import ListSkeleton from "../components/ui/ListSkeleton";
 
 export default function PropertiesPage() {
   const { properties, status, error, reload, createProperty } = useProperties();
@@ -36,14 +38,16 @@ export default function PropertiesPage() {
             happened.
           </p>
         </div>
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => setShowCreate((open) => !open)}
-        >
-          <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
-          Add property
-        </button>
+        {status === "ready" && properties.length === 0 ? null : (
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => setShowCreate((open) => !open)}
+          >
+            <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
+            Add property
+          </button>
+        )}
       </header>
 
       {showCreate ? (
@@ -61,16 +65,26 @@ export default function PropertiesPage() {
       ) : null}
 
       {status === "loading" ? (
-        <p className="muted">Loading properties…</p>
+        <ListSkeleton label="Loading properties…" />
       ) : status === "error" ? (
         <section className="investigation-state" role="alert">
           <p className="page-lead">{error || "Could not load properties."}</p>
           <RetryButton onClick={reload} />
         </section>
       ) : properties.length === 0 ? (
-        <section className="investigation-state">
-          <p className="page-lead">No properties yet. Add the first one to get started.</p>
-        </section>
+        <EmptyState
+          icon={Building2}
+          title="No properties yet"
+          what="Properties are the buildings or sites you operate. Their rooms, guests and stays all belong to one."
+          action={
+            <button type="button" className="primary-button" onClick={() => setShowCreate(true)}>
+              <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
+              Add property
+            </button>
+          }
+        >
+          No properties yet. Add the first one to get started.
+        </EmptyState>
       ) : (
         <ul className="op-list">
           {properties.map((property) => (

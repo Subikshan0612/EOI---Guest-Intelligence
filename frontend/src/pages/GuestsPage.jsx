@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, User } from "lucide-react";
+import { Plus, User, Users } from "lucide-react";
 import GuestForm from "../features/operations/GuestForm";
 import { useGuests } from "../features/operations/useGuests";
 import { useWorkspaceProperties } from "../features/operations/useWorkspaceProperties";
 import { formatGuestName } from "../features/operations/operationsMapping";
 import RetryButton from "../components/auth/RetryButton";
+import EmptyState from "../components/ui/EmptyState";
+import ListSkeleton from "../components/ui/ListSkeleton";
 
 export default function GuestsPage() {
   const [propertyFilter, setPropertyFilter] = useState("");
   const { guests, status, error, reload, createGuest } = useGuests(propertyFilter);
-  const { properties } = useWorkspaceProperties();
+  const { status: propertiesStatus, properties } = useWorkspaceProperties();
   const [showCreate, setShowCreate] = useState(false);
   const [created, setCreated] = useState(null);
   const propertyName = (id) => properties.find((property) => property.id === id)?.name ?? null;
@@ -40,17 +42,19 @@ export default function GuestsPage() {
             Every guest belongs to a property, and every stay belongs to a guest of that property. These are the records EOI uses when it assesses a report about a room.
           </p>
         </div>
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => {
-            setShowCreate((open) => !open);
-            setCreated(null);
-          }}
-        >
-          <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
-          Add guest
-        </button>
+        {status === "ready" && guests.length === 0 ? null : (
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => {
+              setShowCreate((open) => !open);
+              setCreated(null);
+            }}
+          >
+            <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
+            Add guest
+          </button>
+        )}
       </header>
 
       {showCreate ? (
@@ -71,7 +75,7 @@ export default function GuestsPage() {
       ) : null}
 
       {created ? (
-        <p className="muted" role="status">
+        <p className="op-success" role="status">
           Added {formatGuestName(created)}
           {created.stay ? ` with stay ${created.stay.reservationId || "(no booking reference)"}` : ""}
           {created.unit ? ` in room ${created.unit.unitNumber}${created.unit.created ? " (new room added to this property)" : ""}` : ""}.{" "}
@@ -96,18 +100,32 @@ export default function GuestsPage() {
       </div>
 
       {status === "loading" ? (
-        <p className="muted">Loading guests…</p>
+        <ListSkeleton label="Loading guests…" />
       ) : status === "error" ? (
         <section className="investigation-state" role="alert">
           <p className="page-lead">{error || "Could not load guests."}</p>
           <RetryButton onClick={reload} />
         </section>
       ) : guests.length === 0 ? (
-        <section className="investigation-state">
-          <p className="page-lead">
-            {propertyFilter ? "No guests have been added to this property yet." : "No guests yet. Add a property, then add its first guest."}
-          </p>
-        </section>
+        <EmptyState
+          icon={Users}
+          title="No guests yet"
+          what="Guests are the people staying at your properties. Each belongs to one property, and their stays are what EOI assesses a report against."
+          action={
+            propertiesStatus === "ready" && properties.length === 0 ? (
+              <Link to="/operations/properties" className="primary-button">
+                Add a property
+              </Link>
+            ) : (
+              <button type="button" className="primary-button" onClick={() => setShowCreate(true)}>
+                <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
+                Add guest
+              </button>
+            )
+          }
+        >
+          {propertyFilter ? "No guests have been added to this property yet." : "No guests yet. Add a property, then add its first guest."}
+        </EmptyState>
       ) : (
         <ul className="op-list">
           {guests.map((guest) => (

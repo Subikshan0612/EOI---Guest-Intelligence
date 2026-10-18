@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 
 const MAX = 1000; // mirrors the server's bound (backend signalInterpreter.js INTAKE_LIMITS.textMax); the server enforces it
@@ -16,9 +16,17 @@ export default function Composer({
   submitLabel = "Send",
   placeholder = "For example: Room 204's AC is not cooling. What should we do?",
   hint = "Say where it happened and what happened. EOI assesses it against your property, guest and stay records and your operating guidance. It recommends; you decide.",
+  seed = null,
 }) {
   const [text, setText] = useState("");
   const field = useRef(null);
+
+  // A suggestion the person chose (see AssistantStart): its words fill the field for them to edit. Nothing is sent.
+  useEffect(() => {
+    if (!seed?.text) return;
+    setText(seed.text);
+    field.current?.focus();
+  }, [seed]);
 
   const submit = async (event) => {
     event?.preventDefault();
@@ -30,35 +38,42 @@ export default function Composer({
   };
 
   return (
-    <form className="asst-composer" onSubmit={submit} aria-label={label}>
+    <form className="asst-composer" onSubmit={submit} aria-label={label} aria-busy={busy ? "true" : undefined} data-disabled={disabled ? "true" : undefined}>
       <label className="asst-composer-label" htmlFor="asst-input">
         {label}
       </label>
-      <div className="asst-composer-row">
-        <textarea
-          id="asst-input"
-          ref={field}
-          className="asst-input"
-          rows={2}
-          maxLength={MAX}
-          value={text}
-          placeholder={placeholder}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) submit(event);
-          }}
-          disabled={disabled}
-          aria-describedby="asst-input-hint asst-input-error"
-          aria-invalid={error ? "true" : undefined}
-        />
-        <button type="submit" className="primary-button asst-send" disabled={busy || disabled || text.trim().length === 0}>
-          <Send size={16} strokeWidth={1.75} aria-hidden="true" />
-          {busy ? "Sending…" : submitLabel}
-        </button>
+      <textarea
+        id="asst-input"
+        ref={field}
+        className="asst-input"
+        rows={2}
+        maxLength={MAX}
+        value={text}
+        placeholder={placeholder}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) submit(event);
+        }}
+        disabled={disabled}
+        aria-describedby="asst-input-hint asst-input-error"
+        aria-invalid={error ? "true" : undefined}
+      />
+      <div className="asst-composer-footer">
+        <p className="muted asst-note" id="asst-input-hint">
+          {hint}
+        </p>
+        <div className="asst-composer-actions">
+          {text.length > 0 ? (
+            <span className="asst-count muted" aria-hidden="true">
+              {text.length}/{MAX}
+            </span>
+          ) : null}
+          <button type="submit" className="primary-button asst-send" disabled={busy || disabled || text.trim().length === 0}>
+            {busy ? null : <Send size={16} strokeWidth={1.75} aria-hidden="true" />}
+            {busy ? "Sending…" : submitLabel}
+          </button>
+        </div>
       </div>
-      <p className="muted asst-note" id="asst-input-hint">
-        {hint}
-      </p>
       <p className="op-form-error" id="asst-input-error" role="alert">
         {error ?? ""}
       </p>

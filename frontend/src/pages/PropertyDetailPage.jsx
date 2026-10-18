@@ -7,6 +7,7 @@ import UnitRow from "../features/operations/UnitRow";
 import { usePropertyDetail } from "../features/operations/usePropertyDetail";
 import { formatStatusLabel } from "../features/operations/operationsMapping";
 import RetryButton from "../components/auth/RetryButton";
+import ListSkeleton from "../components/ui/ListSkeleton";
 
 export default function PropertyDetailPage() {
   const { propertyId } = useParams();
@@ -178,7 +179,7 @@ export default function PropertyDetailPage() {
         ) : null}
 
         {unitsStatus === "loading" ? (
-          <p className="muted">Loading units…</p>
+          <ListSkeleton label="Loading units…" rows={2} />
         ) : unitsStatus === "error" ? (
           <section className="investigation-state" role="alert">
             <p className="page-lead">{unitsError || "Could not load units."}</p>

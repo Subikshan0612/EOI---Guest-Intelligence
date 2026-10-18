@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import RetryButton from "../components/auth/RetryButton";
+import AssistantStart from "../features/assistant/AssistantStart";
 import Composer from "../features/assistant/Composer";
 import ContextSelector from "../features/assistant/ContextSelector";
 import InvestigationContext from "../features/assistant/InvestigationContext";
@@ -20,10 +21,13 @@ import { useRecentConversations } from "../features/assistant/useRecentConversat
 function NewInvestigation({ onSend, busy, error }) {
   const context = useContextSelection();
   const ready = Boolean(context.context);
+  const [seed, setSeed] = useState(null);
   return (
     <>
+      <AssistantStart ready={ready} onExample={(text) => setSeed({ text, id: Date.now() })} />
       <ContextSelector context={context} />
       <Composer
+        seed={seed}
         onSend={(content) => onSend(content, context.context)}
         busy={busy}
         error={error}
@@ -90,7 +94,10 @@ export default function AssistantPage() {
           {status === "unconfigured" ? (
             <p className="muted" role="status">No workspace is selected, so there is nothing to ask about.</p>
           ) : status === "loading" ? (
-            <p className="muted" role="status">Loading the conversation…</p>
+            <div className="asst-loading" role="status">
+              <p className="muted">Loading the conversation…</p>
+              <span className="asst-skeleton" aria-hidden="true"><span /><span /><span /></span>
+            </div>
           ) : status === "missing" ? (
             <div className="investigation-state">
               <p className="op-form-error">This conversation is no longer available.</p>
@@ -147,7 +154,7 @@ export default function AssistantPage() {
             </Link>
           </div>
           {recent.status === "error" ? <p className="muted asst-note">Recent conversations couldn&apos;t be loaded.</p> : null}
-          {recent.status === "ready" && recent.items.length === 0 ? <p className="muted asst-note">None yet.</p> : null}
+          {recent.status === "ready" && recent.items.length === 0 ? <p className="muted asst-note">None yet. Investigations you start appear here.</p> : null}
           <ul className="asst-recent">
             {recent.items.map((item) => (
               <li key={item.id}>

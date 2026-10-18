@@ -14,18 +14,26 @@ import { missingContextHint, stayLabel } from "./contextSelection";
 export default function ContextSelector({ context }) {
   const { selection, select, retry, properties, guests, stays, units, view } = context;
   const retryButton = (level) => <RetryButton onClick={() => retry(level)} />;
+  // The full text of what is selected, as a tooltip: a native select clips a long value (a stay's reference, room, dates and status) to the width of its box.
+  const selectedProperty = properties.items.find((item) => item.id === selection.propertyId);
+  const selectedGuest = guests.items.find((item) => item.id === selection.guestId);
+  const selectedStay = stays.items.find((item) => item.id === selection.stayId);
 
   return (
-    <section className="koi-card asst-context" aria-labelledby="asst-context-title">
-      <h2 className="card-label" id="asst-context-title">
-        Operational context
-      </h2>
-      <div className="op-form-row">
-        <label className="op-field">
+    <section className="koi-card asst-context" aria-labelledby="asst-context-title" data-complete={missingContextHint(selection) ? "false" : "true"}>
+      <header className="asst-context-head">
+        <h2 className="card-label" id="asst-context-title">
+          Operational context
+        </h2>
+        <p className="asst-context-lead">The records you choose here are the ones EOI uses to assess your report: choose the property, then the guest, then the stay.</p>
+      </header>
+      <div className="asst-context-steps">
+        <label className="op-field asst-context-step">
           <span className="op-field-label">Property</span>
           <select
             className="op-field-input"
             value={selection.propertyId}
+            title={selectedProperty?.name}
             onChange={(event) => select("propertyId", event.target.value)}
             disabled={view.property.disabled}
             aria-describedby="asst-context-property-note"
@@ -39,11 +47,12 @@ export default function ContextSelector({ context }) {
             ))}
           </select>
         </label>
-        <label className="op-field">
+        <label className="op-field asst-context-step">
           <span className="op-field-label">Guest</span>
           <select
             className="op-field-input"
             value={selection.guestId}
+            title={selectedGuest ? formatGuestName(selectedGuest) : undefined}
             onChange={(event) => select("guestId", event.target.value)}
             disabled={view.guest.disabled}
             aria-describedby="asst-context-guest-note"
@@ -57,11 +66,12 @@ export default function ContextSelector({ context }) {
             ))}
           </select>
         </label>
-        <label className="op-field">
+        <label className="op-field asst-context-step">
           <span className="op-field-label">Stay</span>
           <select
             className="op-field-input"
             value={selection.stayId}
+            title={selectedStay ? stayLabel(selectedStay, selectedStay.unitId ? units[selectedStay.unitId] : null) : undefined}
             onChange={(event) => select("stayId", event.target.value)}
             disabled={view.stay.disabled}
             aria-describedby="asst-context-stay-note"
@@ -106,7 +116,7 @@ export default function ContextSelector({ context }) {
           {stays.status === "error" ? retryButton("stays") : null}
         </p>
       </div>
-      <p className="muted asst-note" id="asst-context-required">
+      <p className="asst-context-status" id="asst-context-required">
         {missingContextHint(selection) || "Property, guest and stay selected."}
       </p>
     </section>

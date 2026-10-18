@@ -22,7 +22,7 @@ export default function Sidebar() {
         </IconButton>
       </div>
 
-      <div className="sidebar-footer">
+      <nav className="sidebar-footer" aria-label="Primary">
         <p className="nav-label">Workspace</p>
         <NavLink to="/" end className="nav-link" onClick={closeOverlays}>
           <LayoutDashboard size={18} strokeWidth={1.75} aria-hidden="true" />
@@ -46,7 +46,7 @@ export default function Sidebar() {
           <Settings size={18} strokeWidth={1.75} aria-hidden="true" />
           Settings
         </NavLink>
-      </div>
+      </nav>
     </aside>
   );
 }

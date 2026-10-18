@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CircleAlert } from "lucide-react";
 import RetryButton from "../../components/auth/RetryButton";
 import { KOI_WORKSPACE_ROLE } from "../../config/workspace";
 import { formatShortDate } from "../../utils/formatDate";
@@ -25,17 +26,20 @@ export default function ActionPanel({ decision, constraint = NO_CONSTRAINT, acti
   const availability = actionAvailability(decision);
 
   if (availability === "waiting") {
-    return <p className="muted asst-note">An action proposal becomes available once the decision is approved.</p>;
+    return <p className="muted asst-note asst-pending">An action proposal becomes available once the decision is approved.</p>;
   }
   if (availability === "closed") {
-    return <p className="muted asst-note">This recommendation was not approved, so no action proposal is made.</p>;
+    return <p className="muted asst-note asst-pending">This recommendation was not approved, so no action proposal is made.</p>;
   }
-  if (status === "checking" || status === "idle") return <p className="muted asst-note" role="status">Checking for an action proposal…</p>;
+  if (status === "checking" || status === "idle") return <p className="muted asst-note asst-pending" role="status">Checking for an action proposal…</p>;
   if (status === "loadError") {
     return (
-      <div role="alert">
-        <p className="op-form-error">The action proposal status could not be loaded.</p>
-        <RetryButton onClick={reload} />
+      <div className="asst-alert" role="alert">
+        <CircleAlert size={18} strokeWidth={1.75} aria-hidden="true" />
+        <div className="asst-alert-copy">
+          <p className="op-form-error">The action proposal status could not be loaded.</p>
+          <RetryButton onClick={reload} />
+        </div>
       </div>
     );
   }
@@ -76,7 +80,7 @@ export default function ActionPanel({ decision, constraint = NO_CONSTRAINT, acti
         {action.urgencyLabel ? <span className="status-chip">{action.urgencyLabel} urgency</span> : null}
       </p>
       <div className="asst-quote">
-        <p className="asst-sub">What the approved decision says should be done</p>
+        <p className="asst-sub asst-sub-plain">What the approved decision says should be done</p>
         <p className="dash-text">{action.description}</p>
       </div>
     </>

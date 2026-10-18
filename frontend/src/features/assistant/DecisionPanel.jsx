@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { OctagonAlert } from "lucide-react";
+import { CircleAlert, OctagonAlert } from "lucide-react";
 import RetryButton from "../../components/auth/RetryButton";
 import { KOI_WORKSPACE_ROLE } from "../../config/workspace";
 import { formatShortDate } from "../../utils/formatDate";
@@ -28,12 +28,15 @@ export default function DecisionPanel({ intelligence, constraint = NO_CONSTRAINT
   const role = KOI_WORKSPACE_ROLE;
   const mayReview = roleMayReview(role);
 
-  if (status === "checking" || status === "idle") return <p className="muted asst-note" role="status">Checking for a decision…</p>;
+  if (status === "checking" || status === "idle") return <p className="muted asst-note asst-pending" role="status">Checking for a decision…</p>;
   if (status === "loadError") {
     return (
-      <div role="alert">
-        <p className="op-form-error">The decision status could not be loaded.</p>
-        <RetryButton onClick={reload} />
+      <div className="asst-alert" role="alert">
+        <CircleAlert size={18} strokeWidth={1.75} aria-hidden="true" />
+        <div className="asst-alert-copy">
+          <p className="op-form-error">The decision status could not be loaded.</p>
+          <RetryButton onClick={reload} />
+        </div>
       </div>
     );
   }
@@ -57,7 +60,7 @@ export default function DecisionPanel({ intelligence, constraint = NO_CONSTRAINT
 
   const underReview = (
     <div className="asst-quote">
-      <p className="asst-sub">AI recommendation under review (unchanged)</p>
+      <p className="asst-sub asst-sub-plain">AI recommendation under review (unchanged)</p>
       <p className="dash-text">{intelligence.recommendation}</p>
     </div>
   );

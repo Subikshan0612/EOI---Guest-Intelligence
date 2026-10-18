@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CircleAlert } from "lucide-react";
 import RetryButton from "../../components/auth/RetryButton";
 import { KOI_WORKSPACE_ROLE } from "../../config/workspace";
 import { formatShortDate } from "../../utils/formatDate";
@@ -21,14 +22,17 @@ export default function OutcomePanel({ action, outcomeState }) {
   const role = KOI_WORKSPACE_ROLE;
   const availability = outcomeAvailability(action);
 
-  if (availability === "waiting") return <p className="muted asst-note">An outcome can be recorded once the action proposal is approved.</p>;
-  if (availability === "closed") return <p className="muted asst-note">This action proposal was rejected, so there is nothing to record an outcome for.</p>;
-  if (status === "checking" || status === "idle") return <p className="muted asst-note" role="status">Checking for a recorded outcome…</p>;
+  if (availability === "waiting") return <p className="muted asst-note asst-pending">An outcome can be recorded once the action proposal is approved.</p>;
+  if (availability === "closed") return <p className="muted asst-note asst-pending">This action proposal was rejected, so there is nothing to record an outcome for.</p>;
+  if (status === "checking" || status === "idle") return <p className="muted asst-note asst-pending" role="status">Checking for a recorded outcome…</p>;
   if (status === "loadError") {
     return (
-      <div role="alert">
-        <p className="op-form-error">The outcome status could not be loaded.</p>
-        <RetryButton onClick={reload} />
+      <div className="asst-alert" role="alert">
+        <CircleAlert size={18} strokeWidth={1.75} aria-hidden="true" />
+        <div className="asst-alert-copy">
+          <p className="op-form-error">The outcome status could not be loaded.</p>
+          <RetryButton onClick={reload} />
+        </div>
       </div>
     );
   }
@@ -39,7 +43,7 @@ export default function OutcomePanel({ action, outcomeState }) {
   if (outcome) {
     return (
       <div className="asst-human" data-outcome={outcome.status}>
-        <p className="asst-sub">Outcome</p>
+        <p className="asst-sub asst-sub-plain">Outcome</p>
         <p className="asst-outcome">
           <span className="status-chip" data-tone={outcome.status}>{outcome.statusLabel}</span>
         </p>
@@ -54,7 +58,7 @@ export default function OutcomePanel({ action, outcomeState }) {
   }
 
   // ---- nothing recorded yet -------------------------------------------------------------------------------------------------------------------------
-  if (!roleMayPropose(role)) return <p className="muted asst-note">Your role can read this case but can&apos;t record outcomes.</p>;
+  if (!roleMayPropose(role)) return <p className="muted asst-note asst-pending">Your role can read this case but can&apos;t record outcomes.</p>;
 
   const reset = () => {
     setMode("idle");
